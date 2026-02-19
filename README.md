@@ -35,7 +35,7 @@ git clone https://github.com/clawdata/clawdata.git && cd clawdata
 ./setup.sh
 
 # 3. Start OpenClaw and ask it to work with your data
-openclaw
+openclaw tui
 ```
 
 The setup script installs dependencies, opens an interactive skill picker, and links everything into OpenClaw. That's it — start chatting.
@@ -54,12 +54,12 @@ No MCP servers, no stdio protocols — just command-line tools that the AI agent
 
 ## Skills
 
-| Skill | What it does | Requires |
-|-------|-------------|----------|
-| **duckdb** | Query local DuckDB — SQL, tables, schemas, data ingestion | `clawdata` CLI |
-| **dbt** | Transform data — run models, tests, compile, seeds | `dbt-core`, `dbt-duckdb` |
-| **snowflake** | Query Snowflake warehouse — SQL, staging, loading | `snowsql` CLI |
-| **airflow** | Orchestrate pipelines — DAGs, tasks, connections | `apache-airflow` |
+| Skill | What it does |
+|-------|-------------|
+| **duckdb** | Query local DuckDB — SQL, tables, schemas, data ingestion |
+| **dbt** | Transform data — run models, tests, compile, seeds |
+| **snowflake** | Query Snowflake warehouse — SQL, staging, loading |
+| **airflow** | Orchestrate pipelines — DAGs, tasks, connections |
 
 Each skill is a `SKILL.md` file that teaches the agent when and how to use the tool. Skills are symlinked into OpenClaw's workspace so the agent discovers them automatically.
 
