@@ -1,0 +1,15 @@
+version: 2
+
+sources:
+  - name: raw
+    description: "Raw data loaded from CSV files into DuckDB"
+    schema: main
+    tables:
+      - name: sample_customers
+        description: "Raw CRM customer export"
+      - name: sample_products
+        description: "Raw product catalogue export"
+      - name: sample_orders
+        description: "Raw denormalised order + line-item export"
+      - name: sample_payments
+        description: "Raw payment processor transactions"

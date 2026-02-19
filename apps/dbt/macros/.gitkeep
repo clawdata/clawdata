@@ -1,0 +1,2 @@
+# This folder contains dbt macros (reusable SQL snippets)
+# Example macros for common transformations

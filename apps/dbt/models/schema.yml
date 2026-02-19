@@ -1,0 +1,134 @@
+version: 2
+
+models:
+
+  # ── Silver: cleaned, normalised, deduplicated ─────────────────────
+
+  - name: slv_customers
+    description: "Deduplicated customers — one row per email, standardised country codes"
+    columns:
+      - name: customer_id
+        description: "Unique customer identifier (after dedup)"
+        tests: [unique, not_null]
+      - name: email
+        description: "Lowercase trimmed email"
+        tests: [unique, not_null]
+      - name: country_code
+        description: "ISO 2-letter country code"
+        tests: [not_null]
+
+  - name: slv_orders
+    description: "Normalised order headers — one row per order"
+    columns:
+      - name: order_id
+        description: "Unique order identifier"
+        tests: [unique, not_null]
+      - name: customer_id
+        tests: [not_null]
+      - name: total_amount
+        description: "Fully calculated total (net + tax + shipping)"
+        tests: [not_null]
+      - name: order_status
+        tests:
+          - accepted_values:
+              arguments:
+                values: ['completed', 'shipped', 'pending', 'refunded']
+
+  - name: slv_order_items
+    description: "Individual order line items — one row per product per order"
+    columns:
+      - name: order_item_id
+        description: "Composite key (order_id-line_id)"
+        tests: [unique, not_null]
+      - name: order_id
+        tests: [not_null]
+      - name: product_sku
+        tests: [not_null]
+      - name: quantity
+        tests: [not_null]
+      - name: line_total
+        tests: [not_null]
+
+  - name: slv_products
+    description: "Cleaned product catalogue — active products only"
+    columns:
+      - name: product_sku
+        description: "Product SKU"
+        tests: [unique, not_null]
+      - name: product_name
+        tests: [not_null]
+      - name: category
+        tests: [not_null]
+      - name: margin_pct
+        description: "Profit margin percentage"
+
+  - name: slv_payments
+    description: "Validated payment transactions — excludes failed payments"
+    columns:
+      - name: transaction_id
+        tests: [unique, not_null]
+      - name: order_id
+        tests: [not_null]
+      - name: payment_method
+        tests:
+          - accepted_values:
+              arguments:
+                values: ['Credit Card', 'PayPal', 'Bank Transfer', 'Apple Pay']
+      - name: payment_status
+        tests:
+          - accepted_values:
+              arguments:
+                values: ['completed', 'pending', 'refunded']
+
+  # ── Gold: dimensional model & analytics ────────────────────────────
+
+  - name: dim_customers
+    description: "Customer dimension with lifetime value and segmentation"
+    columns:
+      - name: customer_id
+        tests: [unique, not_null]
+      - name: customer_segment
+        description: "Prospect / New / Active / Loyal / VIP"
+        tests:
+          - accepted_values:
+              arguments:
+                values: ['Prospect', 'New', 'Active', 'Loyal', 'VIP']
+      - name: recency_segment
+        description: "Never Ordered / Current / Recent / Lapsed / Dormant"
+
+  - name: dim_products
+    description: "Product dimension with sales volume and profit metrics"
+    columns:
+      - name: product_sku
+        tests: [unique, not_null]
+      - name: total_revenue
+        description: "Lifetime revenue from this product"
+
+  - name: fct_orders
+    description: "Order fact table with payment information"
+    columns:
+      - name: order_id
+        tests: [unique, not_null]
+      - name: customer_id
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_customers')
+                field: customer_id
+      - name: total_amount
+        tests: [not_null]
+
+  - name: gld_customer_analytics
+    description: "Wide customer analytics — segments, spend, top categories"
+    columns:
+      - name: customer_id
+        tests: [unique, not_null]
+
+  - name: gld_revenue_summary
+    description: "Daily revenue summary with running totals"
+    columns:
+      - name: order_date
+        tests: [unique, not_null]
+      - name: total_collected
+        tests: [not_null]

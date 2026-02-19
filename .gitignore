@@ -1,0 +1,15 @@
+node_modules/
+build/
+*.log
+.env
+.DS_Store
+.clawdata/
+dbt_modules/
+target/
+logs/
+*.duckdb
+*.duckdb.wal
+data/*.csv
+data/*.json
+data/*.parquet
+!data/.gitkeep
