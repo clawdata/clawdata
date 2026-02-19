@@ -9,7 +9,4 @@ target/
 logs/
 *.duckdb
 *.duckdb.wal
-data/*.csv
-data/*.json
-data/*.parquet
 !data/.gitkeep

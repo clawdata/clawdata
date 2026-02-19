@@ -1,0 +1,31 @@
+id,first_name,last_name,email,phone,address,city,state,postal_code,country,registered_at,updated_at,account_status,acquisition_source
+1,Alice,Johnson,alice.johnson@gmail.com,+1-555-0101,742 Evergreen Terrace,Springfield,IL,62701,United States,2023-06-15 09:23:11,2024-11-02 14:30:00,active,organic
+2,Bob,Smith,BOB.SMITH@YAHOO.COM,+44-20-7946-0958,10 Downing St,London,,SW1A 2AA,UK,2023-07-01 11:45:00,2024-10-15 09:12:33,active,referral
+3,Carol,White,carol.white@outlook.com,,88 Queen St,Toronto,ON,M5H 2N2,Canada,2023-07-20 08:00:00,2024-09-20 16:45:00,active,paid_search
+4,David,Brown,david.brown@icloud.com,+1-555-0104,1600 Pennsylvania Ave,Washington,DC,20500,US,2023-08-05 14:22:00,2024-12-01 10:00:00,active,organic
+5,Emma,Davis,emma@davis.com.au,+61-2-9876-5432,42 Harbour Rd,Sydney,NSW,2000,Australia,2023-08-12 03:15:00,2024-08-12 03:15:00,active,social_media
+6,Frank,Miller,frank.miller99@gmail.com,+1-555-0106,350 Fifth Ave,New York,NY,10118,United States,2023-09-01 10:30:00,2025-01-10 08:45:00,active,referral
+7,Grace,Lee,grace.lee@protonmail.com,+65-6789-0123,1 Raffles Place,Singapore,,048616,Singapore,2023-09-15 06:00:00,2024-11-15 12:00:00,active,organic
+8,Henry,Wilson,henry.w@hotmail.co.uk,+44-161-555-0108,15 Piccadilly,Manchester,,M1 1LU,UK,2023-10-01 09:00:00,2024-10-01 09:00:00,inactive,paid_search
+9,Ivy,Martinez,ivy.martinez@gmail.com,+52-55-1234-5678,Av. Reforma 222,Mexico City,CDMX,06600,Mexico,2023-10-10 13:20:00,2025-01-05 11:30:00,active,social_media
+10,Jack,Anderson,jack.anderson@gmail.com,+1-555-0110,100 Universal City Plaza,Los Angeles,CA,91608,US,2023-10-20 16:00:00,2024-12-20 16:00:00,active,organic
+11,Liam,Patel,liam.patel@outlook.in,+91-98765-43210,MG Road 45,Mumbai,MH,400001,India,2023-11-01 04:30:00,2024-11-30 04:30:00,active,referral
+12,Mia,Chen,mia_chen88@qq.com,+86-21-5555-8888,Nanjing Road 100,Shanghai,,200001,China,2023-11-10 02:00:00,2025-01-15 08:00:00,active,paid_search
+13,Noah,Garcia,noah.garcia@gmail.com,+34-91-555-0113,Gran Via 28,Madrid,,28013,Spain,2023-11-20 15:45:00,2024-12-10 15:45:00,active,organic
+14,Olivia,Rossi,olivia.rossi@libero.it,+39-06-555-0114,Via del Corso 10,Rome,,00186,Italy,2023-12-01 10:00:00,2024-12-01 10:00:00,active,social_media
+15,Parker,Nguyen,parker.nguyen@gmail.com,+84-28-3825-0115,Le Loi 50,Ho Chi Minh City,,700000,Vietnam,2023-12-10 07:30:00,2025-01-02 07:30:00,active,referral
+16,Quinn,Taylor,quinn.t@yahoo.com,+1-555-0116,200 Bay St,San Francisco,CA,94133,United States,2024-01-05 12:00:00,2025-01-20 12:00:00,active,organic
+17,Riley,Kumar,riley.kumar@gmail.com,+91-99887-76655,Connaught Place 12,New Delhi,DL,110001,India,2024-01-15 05:00:00,2024-12-15 05:00:00,active,paid_search
+18,Sofia,Mueller,sofia.mueller@web.de,+49-30-555-0118,Unter den Linden 5,Berlin,,10117,Germany,2024-02-01 08:00:00,2024-11-01 08:00:00,active,organic
+19,Tyler,Okafor,tyler.okafor@gmail.com,+234-1-555-0119,Victoria Island,Lagos,,101001,Nigeria,2024-02-10 09:30:00,2024-10-10 09:30:00,active,social_media
+20,Uma,Tanaka,uma.tanaka@yahoo.co.jp,+81-3-5555-0120,Shibuya 1-1-1,Tokyo,,150-0002,Japan,2024-02-20 01:00:00,2025-01-18 01:00:00,active,referral
+21,Victor,Santos,victor.santos@outlook.com,+55-11-5555-0121,Av Paulista 1000,Sao Paulo,SP,01310-100,Brazil,2024-03-01 14:00:00,2024-12-01 14:00:00,active,organic
+22,Wendy,Kim,wendy.kim@naver.com,+82-2-5555-0122,Gangnam-daero 100,Seoul,,06000,South Korea,2024-03-10 06:00:00,2024-11-10 06:00:00,active,paid_search
+23,Xavier,Dupont,xavier.dupont@orange.fr,+33-1-5555-0123,Champs-Elysees 50,Paris,,75008,France,2024-03-20 11:00:00,2024-12-20 11:00:00,active,organic
+24,Yara,Hassan,yara.hassan@gmail.com,+20-2-5555-0124,Tahrir Square 1,Cairo,,11511,Egypt,2024-04-01 08:00:00,2024-10-01 08:00:00,inactive,social_media
+25,Zane,O'Brien,zane.obrien@gmail.com,+353-1-555-0125,O'Connell Street 12,Dublin,,D01,Ireland,2024-04-10 10:00:00,2025-01-10 10:00:00,active,referral
+26,Alice,Johnson,a.johnson@work.com,+1-555-0101,742 Evergreen Terrace,Springfield,IL,62701,United States,2024-04-15 09:00:00,2024-04-15 09:00:00,inactive,organic
+27,Bob,Smith,bob.smith.new@gmail.com,,15 Baker St,London,,W1U 3AT,uk,2024-05-01 11:00:00,2024-08-01 11:00:00,cancelled,organic
+28,Fiona,Campbell,,+44-131-555-0128,Royal Mile 1,Edinburgh,,EH1 1RE,United Kingdom,2024-05-10 09:00:00,2024-09-10 09:00:00,active,paid_search
+29,George,Wright,george.wright@gmail.com,+1-555-0129,Michigan Ave 500,Chicago,IL,60611,US,2024-05-15 14:00:00,2025-01-15 14:00:00,active,organic
+30,Hannah,Berg,hannah.berg@outlook.de,+49-89-555-0130,Marienplatz 1,Munich,,80331,Germany,2024-06-01 07:00:00,2024-12-01 07:00:00,active,referral
