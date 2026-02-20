@@ -18,8 +18,8 @@ export async function dataCommand(
       if (jsonMode) {
         output({ files, count: files.length });
       } else if (!files.length) {
-        console.log("No data files found in data/ folder.");
-        console.log("Drop CSV, JSON, or Parquet files into data/ to get started.");
+        console.log("No data files found in data/sample/ folder.");
+        console.log("Drop CSV, JSON, or Parquet files into data/sample/ to get started.");
       } else {
         console.log("Data files ready for ingestion:");
         files.forEach((f) => console.log(`  • ${f}`));

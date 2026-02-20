@@ -30,7 +30,7 @@ const ROOT = path.resolve(
 if (!process.env.DB_PATH) process.env.DB_PATH = path.join(ROOT, "data/warehouse.duckdb");
 if (!process.env.DBT_PROJECT_DIR) process.env.DBT_PROJECT_DIR = path.join(ROOT, "apps/dbt");
 if (!process.env.DBT_PROFILES_DIR) process.env.DBT_PROFILES_DIR = path.join(ROOT, "apps/dbt");
-if (!process.env.DATA_FOLDER) process.env.DATA_FOLDER = path.join(ROOT, "data");
+if (!process.env.DATA_FOLDER) process.env.DATA_FOLDER = path.join(ROOT, "data/sample");
 if (!process.env.AIRFLOW_DAGS_FOLDER) process.env.AIRFLOW_DAGS_FOLDER = path.join(ROOT, "apps/airflow/dags");
 
 // ── services ─────────────────────────────────────────────────────────
@@ -138,9 +138,9 @@ Getting started:
   4. clawdata db tables       See what was created
 
 Data — load and manage files in the local DuckDB warehouse:
-  data list                    Show CSV/JSON/Parquet files in data/
+  data list                    Show CSV/JSON/Parquet files in data/sample/
   data ingest <file> [table]   Load a single file into DuckDB
-  data ingest-all              Load every file in data/
+  data ingest-all              Load every file in data/sample/
   data reset                   Delete the warehouse and start fresh
 
 Database — query DuckDB directly:

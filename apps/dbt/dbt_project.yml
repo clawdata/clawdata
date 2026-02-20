@@ -17,7 +17,8 @@ clean-targets:
 
 models:
   openclaw_dbt:
-    silver:
-      +materialized: table
-    gold:
-      +materialized: table
+    sample:
+      silver:
+        +materialized: table
+      gold:
+        +materialized: table

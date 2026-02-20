@@ -10,7 +10,7 @@ export class DataIngestor {
     private dbManager: DatabaseManager,
     private taskTracker: TaskTracker
   ) {
-    this.dataFolder = process.env.DATA_FOLDER || "./data";
+    this.dataFolder = process.env.DATA_FOLDER || "./data/sample";
   }
 
   async listFiles(): Promise<string[]> {

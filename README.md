@@ -140,7 +140,8 @@ clawdata/
 ├── apps/
 │   ├── dbt/               ← dbt project (models, profiles, schema)
 │   └── airflow/           ← Airflow DAGs
-├── data/                  ← Drop CSV/JSON/Parquet files here
+├── data/                  ← DuckDB warehouse lives here
+│   └── sample/            ← Sample CSV/JSON/Parquet files
 └── setup.sh               ← One-command bootstrap
 ```
 

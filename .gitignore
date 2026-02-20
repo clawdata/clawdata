@@ -9,4 +9,7 @@ target/
 logs/
 *.duckdb
 *.duckdb.wal
-!data/.gitkeep
+data/*
+!data/sample/
+apps/dbt/models/*
+!apps/dbt/models/sample/
