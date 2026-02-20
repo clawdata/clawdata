@@ -23,6 +23,12 @@ It currently ships with skills for:
 
 And because it's fully open source, you can **add your own skills** for any tool your team uses.
 
+## Demo
+
+<p align="center">
+  <img src="demo.gif" alt="ClawData demo" width="700" />
+</p>
+
 ## Quick start
 
 ```bash
