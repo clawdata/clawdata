@@ -10,17 +10,17 @@ Ideas and improvements for ClawData — organised by area.
 
 | Skill | Description |
 |-------|-------------|
-| **Postgres** | Query and manage PostgreSQL databases — `DatabaseManager` already stubs `postgres` as a type but has no implementation |
-| **BigQuery** | Google BigQuery skill — query, load, manage datasets. `DatabaseType` already includes `bigquery` |
-| **Databricks** | Databricks SQL warehouse queries, Unity Catalog browsing, job triggers |
-| **Spark** | Submit and monitor Spark jobs, read logs, manage clusters |
-| **Great Expectations** | Data quality validation as a standalone skill — define expectations, run suites, review results |
-| **dlt (data load tool)** | Declarative ingestion pipelines — replace manual CSV loading with source connectors (APIs, databases, SaaS) |
-| **Dagster** | Alternative orchestrator skill — asset-based pipelines, sensors, schedules |
-| **Fivetran / Airbyte** | Managed connector skill — trigger syncs, check status, browse connectors |
-| **S3 / GCS / Azure Blob** | Cloud storage skill — list, upload, download, preview files from object stores |
-| **Kafka** | Produce/consume messages, list topics, check consumer group lag |
-| **Metabase / Superset** | BI skill — create questions, refresh dashboards, export charts |
+| ✅ **Postgres** | Query and manage PostgreSQL databases — `DatabaseManager` already stubs `postgres` as a type but has no implementation |
+| ✅ **BigQuery** | Google BigQuery skill — query, load, manage datasets. `DatabaseType` already includes `bigquery` |
+| ✅ **Databricks** | Databricks SQL warehouse queries, Unity Catalog browsing, job triggers |
+| ✅ **Spark** | Submit and monitor Spark jobs, read logs, manage clusters |
+| ✅ **Great Expectations** | Data quality validation as a standalone skill — define expectations, run suites, review results |
+| ✅ **dlt (data load tool)** | Declarative ingestion pipelines — replace manual CSV loading with source connectors (APIs, databases, SaaS) |
+| ✅ **Dagster** | Alternative orchestrator skill — asset-based pipelines, sensors, schedules |
+| ✅ **Fivetran / Airbyte** | Managed connector skill — trigger syncs, check status, browse connectors |
+| ✅ **S3 / GCS / Azure Blob** | Cloud storage skill — list, upload, download, preview files from object stores |
+| ✅ **Kafka** | Produce/consume messages, list topics, check consumer group lag |
+| ✅ **Metabase / Superset** | BI skill — create questions, refresh dashboards, export charts |
 
 ---
 
@@ -101,16 +101,16 @@ An Evidence.dev project for markdown-based dashboards powered by `data/warehouse
 - Customer segmentation report from `gld_customer_analytics`
 - Product performance from `dim_products`
 
-### `apps/jupyter` — Notebook Environment
+### ✅ `apps/jupyter` — Notebook Environment
 Pre-configured Jupyter notebooks with:
 - DuckDB kernel / connection helper
 - Exploratory analysis templates
 - Model development workflow (prototype in notebook → convert to dbt model)
 
-### `apps/prefect` — Alternative Orchestrator
+### ✅ `apps/prefect` — Alternative Orchestrator
 Prefect flows mirroring the Airflow DAGs for teams that prefer Prefect's Python-native approach.
 
-### `apps/lightdash` / `apps/metabase`
+### ✅ `apps/lightdash` / `apps/metabase`
 Pre-built BI project with dashboards and saved questions mapped to the gold layer.
 
 ---
