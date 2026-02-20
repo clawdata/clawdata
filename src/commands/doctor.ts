@@ -8,7 +8,9 @@ import { jsonMode, output } from "../lib/output.js";
 import { getEnabledSkills } from "../tui/skills.js";
 import { execSync } from "child_process";
 import * as fs from "fs/promises";
+import * as fss from "fs";
 import * as path from "path";
+import * as os from "os";
 
 export async function doctorCommand(ingestor: DataIngestor): Promise<void> {
   const ROOT = process.env.CLAWDATA_ROOT || path.resolve(path.dirname(new URL(import.meta.url).pathname) + "/../..");
@@ -81,6 +83,57 @@ export async function doctorCommand(ingestor: DataIngestor): Promise<void> {
       checks.push({ name: "Airflow DAGs", ok: true, detail: `${dags.length} DAG file(s) in ${process.env.AIRFLOW_DAGS_FOLDER}` });
     } catch {
       checks.push({ name: "Airflow DAGs", ok: false, detail: `missing: ${process.env.AIRFLOW_DAGS_FOLDER}` });
+    }
+  }
+
+  // ── Binary checks for additional skills ──
+  const skillBinChecks: { skill: string; label: string; bin: string; hint: string; pythonImport?: boolean }[] = [
+    { skill: "postgres", label: "PostgreSQL", bin: "psql", hint: "brew install postgresql" },
+    { skill: "bigquery", label: "BigQuery", bin: "bq", hint: "brew install google-cloud-sdk" },
+    { skill: "databricks", label: "Databricks", bin: "databricks", hint: "pip install databricks-cli" },
+    { skill: "spark", label: "Spark", bin: "spark-submit", hint: "brew install apache-spark" },
+    { skill: "s3", label: "AWS CLI", bin: "aws", hint: "brew install awscli" },
+    { skill: "kafka", label: "Kafka", bin: "kafka-topics", hint: "brew install kafka" },
+    { skill: "dlt", label: "dlt", bin: "dlt", hint: "pip install dlt" },
+    { skill: "dagster", label: "Dagster", bin: "dagster", hint: "pip install dagster" },
+    { skill: "great-expectations", label: "Great Expectations", bin: "great_expectations", hint: "pip install great-expectations", pythonImport: true },
+    { skill: "snowflake", label: "SnowSQL", bin: "snowsql", hint: "brew install --cask snowflake-snowsql" },
+  ];
+
+  /** Well-known alternate install paths for tools that live outside PATH */
+  const altPaths: Record<string, string[]> = {
+    snowsql: ["~/bin/snowsql", "/Applications/SnowSQL.app/Contents/MacOS/snowsql"],
+    great_expectations: ["~/.local/bin/great_expectations"],
+  };
+
+  function findBin(bin: string, pythonImport?: boolean): boolean {
+    // For Python libraries, check importability rather than PATH
+    if (pythonImport) {
+      try {
+        execSync(`python3 -c "import ${bin}" 2>/dev/null`, { stdio: "pipe" });
+        return true;
+      } catch {
+        return false;
+      }
+    }
+    try {
+      execSync(`command -v ${bin} 2>/dev/null`, { stdio: "pipe" });
+      return true;
+    } catch {
+      return altPaths[bin]?.some((p) => {
+        const resolved = p.replace(/^~/, os.homedir());
+        return fss.existsSync(resolved);
+      }) ?? false;
+    }
+  }
+
+  for (const { skill, label, bin, hint, pythonImport } of skillBinChecks) {
+    if (enabledSkills.includes(skill)) {
+      if (findBin(bin, pythonImport)) {
+        checks.push({ name: label, ok: true, detail: `${bin} found` });
+      } else {
+        checks.push({ name: label, ok: false, detail: `${bin} not found — ${hint}` });
+      }
     }
   }
 

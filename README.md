@@ -14,12 +14,7 @@ Data engineering shouldn't feel mysterious, fragile, or reserved for big tech te
 
 **ClawData** is an open-source skills library that turns [OpenClaw](https://github.com/openclaw/openclaw) into an AI-powered data engineer. Ask it to ingest files, build transformations, query warehouses, or orchestrate pipelines — and it just works.
 
-It currently ships with skills for:
-
-- **DuckDB** — local analytical database, SQL queries, data ingestion
-- **dbt** — data transformations with a silver → gold medallion architecture
-- **Snowflake** — cloud data warehouse queries, staging, and loading
-- **Apache Airflow** — pipeline orchestration, DAGs, scheduling
+It ships with **15 skills** covering databases, orchestration, ingestion, storage, and BI — plus companion apps for notebooks, dashboards, and data exploration.
 
 And because it's fully open source, you can **add your own skills** for any tool your team uses.
 
@@ -63,9 +58,20 @@ No MCP servers, no stdio protocols — just command-line tools that the AI agent
 | Skill | What it does |
 |-------|-------------|
 | **duckdb** | Query local DuckDB — SQL, tables, schemas, data ingestion |
-| **dbt** | Transform data — run models, tests, compile, seeds |
+| **dbt** | Transform data — run models, tests, compile, seeds, docs |
 | **snowflake** | Query Snowflake warehouse — SQL, staging, loading |
 | **airflow** | Orchestrate pipelines — DAGs, tasks, connections |
+| **postgres** | Query and manage PostgreSQL databases |
+| **bigquery** | Google BigQuery — query, load, manage datasets |
+| **databricks** | Databricks SQL, Unity Catalog, job triggers |
+| **spark** | Submit and monitor Spark jobs |
+| **s3** | Cloud storage (S3 / GCS / Azure) — list, upload, download, preview |
+| **kafka** | Produce/consume messages, topic management, consumer lag |
+| **dlt** | Declarative ingestion pipelines with 100+ source connectors |
+| **dagster** | Asset-based orchestration, sensors, schedules |
+| **fivetran** | Managed connectors (Fivetran / Airbyte) — trigger syncs, status |
+| **great-expectations** | Data quality validation — suites, checkpoints, results |
+| **metabase** | BI dashboards (Metabase / Superset) — questions, refresh, export |
 
 Each skill is a `SKILL.md` file that teaches the agent when and how to use the tool. Skills are symlinked into OpenClaw's workspace so the agent discovers them automatically.
 
@@ -89,14 +95,18 @@ clawdata help            # full command reference
 ```bash
 clawdata data list                     # show files in data/
 clawdata data ingest-all               # load everything into DuckDB
+clawdata data ingest "logs/*.json"     # glob/URL/Excel ingestion
 clawdata data reset                    # delete warehouse and start fresh
 ```
 
 **Database** — query DuckDB directly:
 ```bash
 clawdata db tables                     # list all tables
-clawdata db query "SELECT * FROM dim_customers LIMIT 5"
+clawdata db query "SELECT ..."         # run SQL
 clawdata db schema fct_orders          # show columns and types
+clawdata db profile dim_customers      # column-level stats
+clawdata db sample fct_orders          # quick preview
+clawdata db export "SELECT ..." -o out.parquet
 ```
 
 **dbt** — run transformations:
@@ -104,6 +114,16 @@ clawdata db schema fct_orders          # show columns and types
 clawdata dbt run                       # build all models
 clawdata dbt test                      # run schema & data tests
 clawdata dbt models                    # list available models
+clawdata dbt lineage                   # ASCII DAG of dependencies
+clawdata dbt docs --serve              # open docs site
+```
+
+**Workflow:**
+```bash
+clawdata run                           # full pipeline: ingest → dbt run → test
+clawdata watch                         # re-run models on file change
+clawdata serve                         # HTTP API mode
+clawdata config                        # view/edit environment config
 ```
 
 ## Data architecture
@@ -111,15 +131,16 @@ clawdata dbt models                    # list available models
 ClawData ships with sample data and a medallion-architecture dbt project:
 
 ```
-Sources (CSV)          Silver (tables)           Gold (tables)
-─────────────          ───────────────           ────────────
-sample_customers  →  slv_customers (dedup)   →  dim_customers
-sample_products   →  slv_products (clean)    →  dim_products
-sample_orders     →  slv_orders (normalise)  →  fct_orders
-                     slv_order_items            gld_customer_analytics
-sample_payments   →  slv_payments (validate) →  gld_revenue_summary
+Sources (CSV)        Bronze (views)       Silver (tables)         Gold (tables)
+─────────────        ──────────────       ───────────────         ────────────
+sample_customers  →  brz_customers    →  slv_customers (dedup)  →  dim_customers
+sample_products   →  brz_products     →  slv_products (clean)   →  dim_products
+sample_orders     →  brz_orders       →  slv_orders (normalise) →  fct_orders
+                                        slv_order_items           gld_customer_analytics
+sample_payments   →  brz_payments     →  slv_payments (validate)→  gld_revenue_summary
 ```
 
+- **Bronze** — raw ingestion views (`SELECT *` from source), written to `bronze` schema
 - **Silver** — cleans, deduplicates, normalises, and validates raw data
 - **Gold** — dimensional model (dims + facts) and analytical aggregates
 
@@ -127,21 +148,37 @@ sample_payments   →  slv_payments (validate) →  gld_revenue_summary
 
 ```
 clawdata/
-├── skills/                ← Skill definitions (SKILL.md files)
+├── skills/                ← Skill definitions (15 × SKILL.md)
 │   ├── duckdb/
 │   ├── dbt/
 │   ├── snowflake/
-│   └── airflow/
+│   ├── airflow/
+│   ├── postgres/
+│   ├── bigquery/
+│   ├── databricks/
+│   ├── spark/
+│   ├── s3/
+│   ├── kafka/
+│   ├── dlt/
+│   ├── dagster/
+│   ├── fivetran/
+│   ├── great-expectations/
+│   └── metabase/
 ├── src/                   ← TypeScript CLI source
 │   ├── cli.ts             ← Entry point & dispatcher
-│   ├── commands/          ← data, db, dbt, doctor
-│   ├── lib/               ← database, ingestor, dbt wrapper
+│   ├── commands/          ← data, db, dbt, doctor, serve, …
+│   ├── lib/               ← database, ingestor, dbt, adapters, plugins
 │   └── tui/               ← Interactive skill selector
 ├── apps/
-│   ├── dbt/               ← dbt project (models, profiles, schema)
-│   └── airflow/           ← Airflow DAGs
+│   ├── dbt/               ← dbt project (bronze/silver/gold models)
+│   ├── airflow/           ← Airflow DAGs (dynamic, Docker-based)
+│   ├── prefect/           ← Prefect flows (alternative orchestrator)
+│   ├── jupyter/           ← Pre-configured notebooks + DuckDB helpers
+│   ├── streamlit/         ← Data explorer UI
+│   ├── evidence/          ← Markdown-based analytics dashboards
+│   └── lightdash/         ← BI project (Docker Compose)
 ├── data/                  ← DuckDB warehouse lives here
-│   └── sample/            ← Sample CSV/JSON/Parquet files
+│   └── sample/            ← Sample CSV files
 └── setup.sh               ← One-command bootstrap
 ```
 
@@ -176,15 +213,6 @@ ClawData is designed to be extended. Adding a new skill is straightforward:
 3. **Link it** — run `clawdata skills` to link your new skill into OpenClaw
 
 That's it. The agent will pick up the new skill on its next conversation.
-
-### Ideas for new skills
-
-- **Postgres / MySQL** — query production databases safely
-- **Spark** — large-scale data processing
-- **Great Expectations** — data quality validation
-- **Dagster** — alternative pipeline orchestration
-- **Kafka** — stream processing and topic management
-- **Tableau / Looker** — BI tool integration
 
 Pull requests welcome — the more skills, the more useful ClawData becomes for everyone.
 

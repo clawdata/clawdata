@@ -37,7 +37,7 @@ const SKILLS: SkillDef[] = [
     bin: "dbt",
     description: "dbt data transformations, models, tests",
     installHint: "pip install dbt-core dbt-duckdb",
-    installCmds: ["pip3 install --quiet dbt-core dbt-duckdb"],
+    installCmds: ["pip3 install --quiet --break-system-packages dbt-core dbt-duckdb"],
   },
   {
     name: "snowflake",
@@ -51,7 +51,84 @@ const SKILLS: SkillDef[] = [
     bin: "airflow",
     description: "Apache Airflow pipeline orchestration",
     installHint: "pip install apache-airflow",
-    installCmds: ["pip3 install --quiet apache-airflow"],
+    installCmds: ["pip3 install --quiet --break-system-packages apache-airflow"],
+  },
+  {
+    name: "postgres",
+    bin: "psql",
+    description: "Query and manage PostgreSQL databases",
+    installHint: "brew install postgresql (or apt install postgresql-client)",
+    installCmds: [],
+  },
+  {
+    name: "bigquery",
+    bin: "bq",
+    description: "Google BigQuery — query, load, manage datasets",
+    installHint: "brew install google-cloud-sdk",
+    installCmds: ["brew install --quiet google-cloud-sdk"],
+  },
+  {
+    name: "databricks",
+    bin: "databricks",
+    description: "Databricks SQL, Unity Catalog, job triggers",
+    installHint: "pip install databricks-cli",
+    installCmds: ["pip3 install --quiet --break-system-packages databricks-cli"],
+  },
+  {
+    name: "spark",
+    bin: "spark-submit",
+    description: "Submit and monitor Apache Spark jobs",
+    installHint: "brew install apache-spark",
+    installCmds: ["brew install --quiet apache-spark"],
+  },
+  {
+    name: "s3",
+    bin: "aws",
+    description: "Cloud storage (S3 / GCS / Azure) — list, upload, download",
+    installHint: "brew install awscli",
+    installCmds: ["brew install --quiet awscli"],
+  },
+  {
+    name: "kafka",
+    bin: "kafka-topics",
+    description: "Produce/consume messages, topic management, consumer lag",
+    installHint: "brew install kafka",
+    installCmds: ["brew install --quiet kafka"],
+  },
+  {
+    name: "dlt",
+    bin: "dlt",
+    description: "Declarative ingestion pipelines with 100+ source connectors",
+    installHint: "pip install dlt",
+    installCmds: ["pip3 install --quiet --break-system-packages dlt"],
+  },
+  {
+    name: "dagster",
+    bin: "dagster",
+    description: "Asset-based orchestration, sensors, schedules",
+    installHint: "pip install dagster dagster-webserver",
+    installCmds: ["pip3 install --quiet --break-system-packages dagster dagster-webserver"],
+  },
+  {
+    name: "fivetran",
+    bin: "fivetran",
+    description: "Managed connectors (Fivetran / Airbyte) — trigger syncs, status",
+    installHint: "npm install -g fivetran-cli",
+    installCmds: ["npm install --global --silent fivetran-cli"],
+  },
+  {
+    name: "great-expectations",
+    bin: "great_expectations",
+    description: "Data quality validation — suites, checkpoints, results",
+    installHint: "pip install great-expectations",
+    installCmds: ["pip3 install --quiet --break-system-packages great-expectations"],
+  },
+  {
+    name: "metabase",
+    bin: "metabase",
+    description: "BI dashboards (Metabase / Superset) — questions, refresh, export",
+    installHint: "docker pull metabase/metabase",
+    installCmds: [],
   },
 ];
 
@@ -99,9 +176,24 @@ function hasBin(name: string): boolean {
     execSync(`command -v ${name}`, { stdio: "ignore" });
     return true;
   } catch {
-    return false;
+    // Check well-known alternate paths for tools that install outside PATH
+    return ALTERNATE_PATHS[name]?.some((p) => {
+      const resolved = p.replace(/^~/, os.homedir());
+      return fs.existsSync(resolved);
+    }) ?? false;
   }
 }
+
+/** Tools that install to non-standard locations */
+const ALTERNATE_PATHS: Record<string, string[]> = {
+  snowsql: [
+    "~/bin/snowsql",
+    "/Applications/SnowSQL.app/Contents/MacOS/snowsql",
+  ],
+  great_expectations: [
+    "~/.local/bin/great_expectations",
+  ],
+};
 
 // ── alternate screen buffer ──────────────────────────────────────────
 
