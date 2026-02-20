@@ -22,6 +22,8 @@ interface SkillDef {
   installHint: string;
   /** Shell commands to install this skill's dependencies. Empty = no install needed. */
   installCmds: string[];
+  /** If true, check availability via `python3 -c "import <bin>"` instead of PATH lookup */
+  pythonImport?: boolean;
 }
 
 const SKILLS: SkillDef[] = [
@@ -111,21 +113,22 @@ const SKILLS: SkillDef[] = [
   },
   {
     name: "fivetran",
-    bin: "fivetran",
+    bin: "curl",
     description: "Managed connectors (Fivetran / Airbyte) — trigger syncs, status",
-    installHint: "npm install -g fivetran-cli",
-    installCmds: ["npm install --global --silent fivetran-cli"],
+    installHint: "API-based — configure FIVETRAN_API_KEY",
+    installCmds: [],
   },
   {
     name: "great-expectations",
     bin: "great_expectations",
+    pythonImport: true,
     description: "Data quality validation — suites, checkpoints, results",
     installHint: "pip install great-expectations",
     installCmds: ["pip3 install --quiet --break-system-packages great-expectations"],
   },
   {
     name: "metabase",
-    bin: "metabase",
+    bin: "docker",
     description: "BI dashboards (Metabase / Superset) — questions, refresh, export",
     installHint: "docker pull metabase/metabase",
     installCmds: [],
@@ -166,12 +169,20 @@ export function getEnabledSkills(projectRoot: string): string[] {
   const saved = loadSavedSkills(projectRoot);
   if (saved) return saved;
   // first run — nothing saved yet, return skills whose binary is available
-  return SKILLS.filter((s) => hasBin(s.bin)).map((s) => s.name);
+  return SKILLS.filter((s) => hasBin(s.bin, s.pythonImport)).map((s) => s.name);
 }
 
 // ── helpers ──────────────────────────────────────────────────────────
 
-function hasBin(name: string): boolean {
+function hasBin(name: string, pythonImport?: boolean): boolean {
+  if (pythonImport) {
+    try {
+      execSync(`python3 -c "import ${name}" 2>/dev/null`, { stdio: "ignore" });
+      return true;
+    } catch {
+      return false;
+    }
+  }
   try {
     execSync(`command -v ${name}`, { stdio: "ignore" });
     return true;
@@ -229,7 +240,7 @@ interface SkillRow {
 function buildRows(projectRoot: string): SkillRow[] {
   const saved = loadSavedSkills(projectRoot);
   return SKILLS.map((def) => {
-    const available = hasBin(def.bin);
+    const available = hasBin(def.bin, def.pythonImport);
     // If we have saved config, use it. Otherwise pre-select if binary is available.
     const selected = saved ? saved.includes(def.name) : available;
     return { def, available, selected };
