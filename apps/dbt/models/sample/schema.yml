@@ -201,7 +201,7 @@ models:
           - unique
           - not_null
           - dbt_utils.at_least_one
-      - name: total_spend
+      - name: lifetime_value
         description: "Lifetime spend by this customer"
         tests:
           - dbt_utils.expression_is_true:
@@ -224,7 +224,7 @@ models:
           - not_null
           - dbt_utils.expression_is_true:
               expression: ">= 0"
-      - name: order_count
+      - name: orders
         description: "Number of orders placed on this date"
         tests:
           - dbt_utils.expression_is_true:

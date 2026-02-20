@@ -48,14 +48,14 @@ describe('dbt-utils integration tests in schema.yml', () => {
     it('fct_orders.total_amount > 0', () => {
       expect(hasTest('fct_orders', 'total_amount', testName)).toBe(true);
     });
-    it('gld_customer_analytics.total_spend >= 0', () => {
-      expect(hasTest('gld_customer_analytics', 'total_spend', testName)).toBe(true);
+    it('gld_customer_analytics.lifetime_value >= 0', () => {
+      expect(hasTest('gld_customer_analytics', 'lifetime_value', testName)).toBe(true);
     });
     it('gld_revenue_summary.total_collected >= 0', () => {
       expect(hasTest('gld_revenue_summary', 'total_collected', testName)).toBe(true);
     });
-    it('gld_revenue_summary.order_count > 0', () => {
-      expect(hasTest('gld_revenue_summary', 'order_count', testName)).toBe(true);
+    it('gld_revenue_summary.orders > 0', () => {
+      expect(hasTest('gld_revenue_summary', 'orders', testName)).toBe(true);
     });
   });
 
