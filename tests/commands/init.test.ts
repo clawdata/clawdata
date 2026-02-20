@@ -79,6 +79,49 @@ describe("initCommand", () => {
     expect(content).toContain("source('raw'");
   });
 
+  it("should create silver models", async () => {
+    const { initCommand } = await import("../../src/commands/init.js");
+    await initCommand(tmpDir, []);
+
+    const silver = await fs.readdir(path.join(tmpDir, "apps/dbt/models/sample/silver"));
+    expect(silver.length).toBeGreaterThanOrEqual(3);
+    expect(silver).toContain("slv_customers.sql");
+
+    const content = await fs.readFile(
+      path.join(tmpDir, "apps/dbt/models/sample/silver/slv_customers.sql"),
+      "utf-8"
+    );
+    expect(content).toContain("ref('brz_customers')");
+  });
+
+  it("should create gold models", async () => {
+    const { initCommand } = await import("../../src/commands/init.js");
+    await initCommand(tmpDir, []);
+
+    const gold = await fs.readdir(path.join(tmpDir, "apps/dbt/models/sample/gold"));
+    expect(gold.length).toBeGreaterThanOrEqual(2);
+    expect(gold).toContain("dim_customers.sql");
+
+    const content = await fs.readFile(
+      path.join(tmpDir, "apps/dbt/models/sample/gold/dim_customers.sql"),
+      "utf-8"
+    );
+    expect(content).toContain("ref('slv_");
+  });
+
+  it("should generate schema.yml with model names", async () => {
+    const { initCommand } = await import("../../src/commands/init.js");
+    await initCommand(tmpDir, []);
+
+    const content = await fs.readFile(
+      path.join(tmpDir, "apps/dbt/models/sample/schema.yml"),
+      "utf-8"
+    );
+    expect(content).toContain("brz_customers");
+    expect(content).toContain("slv_customers");
+    expect(content).toContain("dim_customers");
+  });
+
   it("should skip existing files on second run", async () => {
     const { initCommand } = await import("../../src/commands/init.js");
 

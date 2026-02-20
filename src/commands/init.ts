@@ -72,10 +72,27 @@ sources:
         description: "Raw payment processor transactions"
 `;
 
-const SCHEMA_YML = `version: 2
+const SCHEMA_YML_HEADER = `version: 2
 
-models: []
+models:
 `;
+
+function renderSchemaYml(template: ProjectTemplate): string {
+  const models: string[] = [];
+  for (const filename of Object.keys(template.bronzeModels)) {
+    const name = filename.replace(".sql", "");
+    models.push(`  - name: ${name}\n    description: "Bronze: raw passthrough from source"`);
+  }
+  for (const filename of Object.keys(template.silverModels)) {
+    const name = filename.replace(".sql", "");
+    models.push(`  - name: ${name}\n    description: "Silver: cleaned and standardised"`);
+  }
+  for (const filename of Object.keys(template.goldModels)) {
+    const name = filename.replace(".sql", "");
+    models.push(`  - name: ${name}\n    description: "Gold: business-ready model"`);
+  }
+  return SCHEMA_YML_HEADER + models.join("\n") + "\n";
+}
 
 const SAMPLE_BRONZE = `-- Bronze: raw passthrough from source
 SELECT * FROM {{ source('raw', 'sample_customers') }}
@@ -131,7 +148,7 @@ export async function initCommand(
     "apps/dbt/dbt_project.yml": DBI_PROJECT_YML,
     "apps/dbt/profiles.yml": DBT_PROFILES_YML,
     "apps/dbt/models/sample/_sources.yml": renderSourcesYml(template),
-    "apps/dbt/models/sample/schema.yml": SCHEMA_YML,
+    "apps/dbt/models/sample/schema.yml": renderSchemaYml(template),
     "apps/dbt/seeds/.gitkeep": GITKEEP,
     "apps/dbt/snapshots/.gitkeep": GITKEEP,
     "apps/airflow/dags/.gitkeep": GITKEEP,
@@ -141,6 +158,16 @@ export async function initCommand(
   // Add template-specific bronze models
   for (const [filename, sql] of Object.entries(template.bronzeModels)) {
     files[`apps/dbt/models/sample/bronze/${filename}`] = sql;
+  }
+
+  // Add template-specific silver models
+  for (const [filename, sql] of Object.entries(template.silverModels)) {
+    files[`apps/dbt/models/sample/silver/${filename}`] = sql;
+  }
+
+  // Add template-specific gold models
+  for (const [filename, sql] of Object.entries(template.goldModels)) {
+    files[`apps/dbt/models/sample/gold/${filename}`] = sql;
   }
 
   // Create directories

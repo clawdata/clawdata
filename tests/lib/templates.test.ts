@@ -31,6 +31,20 @@ describe('project templates', () => {
         expect(Object.keys(tpl.bronzeModels).length).toBeGreaterThanOrEqual(3);
       });
 
+      it(`${key}: has silverModels that reference brz_ refs`, () => {
+        expect(Object.keys(tpl.silverModels).length).toBeGreaterThanOrEqual(3);
+        for (const sql of Object.values(tpl.silverModels)) {
+          expect(sql).toContain("ref('brz_");
+        }
+      });
+
+      it(`${key}: has goldModels that reference slv_ refs`, () => {
+        expect(Object.keys(tpl.goldModels).length).toBeGreaterThanOrEqual(2);
+        for (const sql of Object.values(tpl.goldModels)) {
+          expect(sql).toContain("ref('");
+        }
+      });
+
       it(`${key}: every source table has a name and description`, () => {
         for (const t of tpl.sourceTables) {
           expect(t.name.length).toBeGreaterThan(0);
