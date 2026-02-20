@@ -2,6 +2,7 @@ import { exec } from "child_process";
 import { promisify } from "util";
 import * as fs from "fs/promises";
 import * as path from "path";
+import * as http from "http";
 
 const execAsync = promisify(exec);
 
@@ -24,8 +25,8 @@ export class DbtManager {
   private profilesDir: string;
 
   constructor() {
-    this.projectDir = process.env.DBT_PROJECT_DIR || "./apps/dbt";
-    this.profilesDir = process.env.DBT_PROFILES_DIR || "./apps/dbt";
+    this.projectDir = path.resolve(process.env.DBT_PROJECT_DIR || "./apps/dbt");
+    this.profilesDir = path.resolve(process.env.DBT_PROFILES_DIR || "./apps/dbt");
   }
 
   private async runCommand(command: string): Promise<DbtRunResult> {
@@ -59,13 +60,78 @@ export class DbtManager {
   }
 
   async docs(): Promise<DbtRunResult> {
-    return this.runCommand("dbt docs generate");
+    const gen = await this.runCommand("dbt docs generate");
+    if (!gen.success) return gen;
+    // Inline manifest + catalog into index.html so it works via file:// too
+    await this.inlineDocsData();
+    return gen;
+  }
+
+  /**
+   * Replace placeholder strings in the generated index.html with actual JSON
+   * from manifest.json and catalog.json.  This produces a self-contained HTML
+   * file that works when opened directly (file://) without a server.
+   */
+  async inlineDocsData(): Promise<void> {
+    const targetDir = path.join(this.projectDir, "target");
+    const htmlPath = path.join(targetDir, "index.html");
+    const manifestPath = path.join(targetDir, "manifest.json");
+    const catalogPath = path.join(targetDir, "catalog.json");
+
+    const [htmlRaw, manifestRaw, catalogRaw] = await Promise.all([
+      fs.readFile(htmlPath, "utf-8"),
+      fs.readFile(manifestPath, "utf-8").catch(() => "{}"),
+      fs.readFile(catalogPath, "utf-8").catch(() => "{}"),
+    ]);
+
+    const html = htmlRaw
+      .replace('"MANIFEST.JSON INLINE DATA"', () => manifestRaw.trim())
+      .replace('"CATALOG.JSON INLINE DATA"', () => catalogRaw.trim());
+
+    await fs.writeFile(htmlPath, html);
   }
 
   async docsServe(port = 8080): Promise<DbtRunResult> {
     const gen = await this.docs();
     if (!gen.success) return gen;
-    return this.runCommand(`dbt docs serve --port ${port} --no-browser`);
+
+    const targetDir = path.join(this.projectDir, "target");
+
+    return new Promise((resolve) => {
+      const MIME: Record<string, string> = {
+        ".html": "text/html",
+        ".js": "application/javascript",
+        ".json": "application/json",
+        ".css": "text/css",
+        ".svg": "image/svg+xml",
+        ".png": "image/png",
+      };
+
+      const server = http.createServer(async (req, res) => {
+        const url = (req.url || "/").split("?")[0].split("#")[0];
+        const filePath = path.join(targetDir, url === "/" ? "index.html" : url);
+        try {
+          const data = await fs.readFile(filePath);
+          const ext = path.extname(filePath);
+          res.writeHead(200, { "Content-Type": MIME[ext] || "application/octet-stream" });
+          res.end(data);
+        } catch {
+          res.writeHead(404);
+          res.end("Not found");
+        }
+      });
+
+      server.listen(port, () => {
+        resolve({
+          success: true,
+          output: `dbt docs serving at http://localhost:${port}\n${gen.output}`,
+        });
+      });
+
+      server.on("error", (err: Error) => {
+        resolve({ success: false, output: `Failed to start server: ${err.message}` });
+      });
+    });
   }
 
   get docsDir(): string {
