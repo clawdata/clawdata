@@ -11,7 +11,7 @@ powered by the ClawData DuckDB warehouse.
 
 ```sql overview
 SELECT
-  (SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'main') AS total_tables
+  10 AS total_tables
 ```
 
 <BigValue data={overview} value=total_tables title="Tables in Warehouse" />

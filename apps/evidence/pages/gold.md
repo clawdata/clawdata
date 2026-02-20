@@ -16,7 +16,7 @@ SELECT
   SUM(orders)                           AS total_orders,
   SUM(unique_customers)                 AS unique_buyers,
   ROUND(SUM(total_collected) / NULLIF(SUM(orders), 0), 2) AS blended_aov
-FROM gold.gld_revenue_summary;
+FROM clawdata.gld_revenue_summary;
 ```
 
 <BigValue data={gold_kpis} value=total_collected title="Total Collected" />
@@ -32,7 +32,7 @@ SELECT
   SUM(net_revenue)                AS net_revenue,
   SUM(orders)                     AS orders,
   SUM(total_collected)            AS total_collected
-FROM gold.gld_revenue_summary
+FROM clawdata.gld_revenue_summary
 GROUP BY 1
 ORDER BY 1;
 ```
@@ -48,7 +48,7 @@ SELECT
   COUNT(*)                             AS customers,
   ROUND(SUM(lifetime_value), 2)        AS revenue,
   ROUND(AVG(avg_order_value), 2)       AS avg_order_value
-FROM gold.gld_customer_analytics
+FROM clawdata.gld_customer_analytics
 GROUP BY 1
 ORDER BY revenue DESC;
 ```
@@ -63,7 +63,7 @@ SELECT
   recency_segment,
   COUNT(*)                      AS customers,
   ROUND(SUM(lifetime_value), 2) AS revenue
-FROM gold.gld_customer_analytics
+FROM clawdata.gld_customer_analytics
 GROUP BY 1
 ORDER BY revenue DESC;
 ```
@@ -78,7 +78,7 @@ SELECT
   country_code,
   COUNT(*)                      AS customers,
   ROUND(SUM(lifetime_value), 2) AS revenue
-FROM gold.gld_customer_analytics
+FROM clawdata.gld_customer_analytics
 GROUP BY 1
 ORDER BY revenue DESC
 LIMIT 15;
@@ -98,7 +98,7 @@ SELECT
   ROUND(lifetime_value, 2) AS lifetime_value,
   ROUND(avg_order_value, 2) AS avg_order_value,
   last_order_date
-FROM gold.gld_customer_analytics
+FROM clawdata.gld_customer_analytics
 ORDER BY lifetime_value DESC
 LIMIT 20;
 ```

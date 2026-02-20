@@ -1,4 +1,4 @@
 name: clawdata
 type: duckdb
 options:
-  filename: ../../data/warehouse.duckdb
+  filename: ../../../../data/warehouse.duckdb

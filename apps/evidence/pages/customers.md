@@ -13,8 +13,8 @@ SELECT
     ELSE 'One-time'
   END AS segment,
   COUNT(*) AS customers,
-  ROUND(AVG(total_spent), 2) AS avg_spent
-FROM dim_customers
+  ROUND(AVG(lifetime_value), 2) AS avg_spent
+FROM clawdata.dim_customers
 GROUP BY 1
 ORDER BY 2 DESC
 ```
@@ -27,11 +27,11 @@ ORDER BY 2 DESC
 
 ```sql top_customers
 SELECT
-  customer_name,
+  full_name,
   total_orders,
-  total_spent
-FROM dim_customers
-ORDER BY total_spent DESC
+  lifetime_value
+FROM clawdata.dim_customers
+ORDER BY lifetime_value DESC
 LIMIT 20
 ```
 

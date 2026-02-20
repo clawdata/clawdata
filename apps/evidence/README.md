@@ -1,37 +1,48 @@
-# ClawData Evidence Analytics
+# Evidence Template Project
 
-Markdown-based analytics dashboards powered by [Evidence](https://evidence.dev) and the ClawData DuckDB warehouse.
+## Using Codespaces
 
-## Quick Start
+If you are using this template in Codespaces, click the `Start Evidence` button in the bottom status bar. This will install dependencies and open a preview of your project in your browser - you should get a popup prompting you to open in browser.
+
+Or you can use the following commands to get started:
 
 ```bash
-# Install Evidence CLI
-npm install -g @evidence-dev/evidence
-
-# Navigate to the Evidence app
-cd apps/evidence
-
-# Install dependencies
 npm install
-
-# Start the dev server
-npm run dev
+npm run sources
+npm run dev -- --host 0.0.0.0
 ```
 
-## Pages
+See [the CLI docs](https://docs.evidence.dev/cli/) for more command information.
 
-| Page | Description |
-|------|-------------|
-| `/` | Overview dashboard with table count |
-| `/revenue` | Monthly revenue, orders, and payment breakdown |
-| `/customers` | Customer segmentation and top-spenders |
+**Note:** Codespaces is much faster on the Desktop app. After the Codespace has booted, select the hamburger menu → Open in VS Code Desktop.
 
-## Data Source
+## Get Started from VS Code
 
-The app connects to `../../data/warehouse.duckdb` via the DuckDB connector.
-Make sure you've run `clawdata data ingest-all && clawdata dbt run` before starting.
+The easiest way to get started is using the [VS Code Extension](https://marketplace.visualstudio.com/items?itemName=Evidence.evidence-vscode):
 
-## Adding Pages
 
-Create a new `.md` file in `pages/`. Use SQL code fences to query data and
-Evidence components (`<BarChart>`, `<LineChart>`, `<DataTable>`, etc.) to visualize.
+
+1. Install the extension from the VS Code Marketplace
+2. Open the Command Palette (Ctrl/Cmd + Shift + P) and enter `Evidence: New Evidence Project`
+3. Click `Start Evidence` in the bottom status bar
+
+## Get Started using the CLI
+
+```bash
+npx degit evidence-dev/template my-project
+cd my-project 
+npm install 
+npm run sources
+npm run dev 
+```
+
+Check out the docs for [alternative install methods](https://docs.evidence.dev/getting-started/install-evidence) including Docker, Github Codespaces, and alongside dbt.
+
+
+
+## Learning More
+
+- [Docs](https://docs.evidence.dev/)
+- [Github](https://github.com/evidence-dev/evidence)
+- [Slack Community](https://slack.evidence.dev/)
+- [Evidence Home Page](https://www.evidence.dev)

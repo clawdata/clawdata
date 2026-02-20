@@ -13,3 +13,9 @@ data/*
 !data/sample/
 apps/dbt/models/*
 !apps/dbt/models/sample/
+
+# Evidence
+apps/evidence/.evidence/
+apps/evidence/node_modules/
+apps/evidence/build/
+apps/evidence/package-lock.json

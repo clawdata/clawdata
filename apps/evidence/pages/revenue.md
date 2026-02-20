@@ -7,9 +7,9 @@ title: Revenue Summary
 ```sql monthly_revenue
 SELECT
   DATE_TRUNC('month', order_date) AS month,
-  SUM(amount) AS revenue,
+  SUM(total_amount) AS revenue,
   COUNT(DISTINCT order_id) AS orders
-FROM fct_orders
+FROM clawdata.fct_orders
 GROUP BY 1
 ORDER BY 1
 ```
@@ -25,7 +25,7 @@ SELECT
   payment_method,
   SUM(amount) AS revenue,
   COUNT(*) AS transactions
-FROM slv_payments
+FROM clawdata.slv_payments
 GROUP BY 1
 ORDER BY 2 DESC
 ```
