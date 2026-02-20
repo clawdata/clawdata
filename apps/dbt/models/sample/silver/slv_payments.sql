@@ -16,5 +16,5 @@ SELECT
     status                                 AS payment_status,
     processor_ref,
     processed_at::TIMESTAMP                AS processed_at
-FROM {{ source('raw', 'sample_payments') }}
+FROM {{ ref('brz_payments') }}
 WHERE status != 'failed'

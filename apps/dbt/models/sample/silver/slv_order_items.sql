@@ -13,6 +13,6 @@ SELECT
     ROUND(line_total * (discount_pct / 100.0), 2)  AS line_discount,
     order_date::DATE                       AS order_date,
     order_status
-FROM {{ source('raw', 'sample_orders') }}
+FROM {{ ref('brz_orders') }}
 WHERE order_status NOT IN ('cancelled')
   AND quantity > 0

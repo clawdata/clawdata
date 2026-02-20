@@ -2,6 +2,20 @@ version: 2
 
 models:
 
+  # ── Bronze: raw data passthrough ──────────────────────────────────
+
+  - name: brz_customers
+    description: "Raw customer data — unmodified passthrough from source"
+
+  - name: brz_orders
+    description: "Raw orders data — unmodified passthrough from source"
+
+  - name: brz_products
+    description: "Raw products data — unmodified passthrough from source"
+
+  - name: brz_payments
+    description: "Raw payments data — unmodified passthrough from source"
+
   # ── Silver: cleaned, normalised, deduplicated ─────────────────────
 
   - name: slv_customers
@@ -132,3 +146,35 @@ models:
         tests: [unique, not_null]
       - name: total_collected
         tests: [not_null]
+
+exposures:
+
+  - name: executive_revenue_dashboard
+    type: dashboard
+    description: "C-suite revenue dashboard showing daily/cumulative revenue, order volumes, and AOV"
+    depends_on:
+      - ref('gld_revenue_summary')
+      - ref('dim_customers')
+    owner:
+      name: "Data Team"
+      email: "data-team@example.com"
+
+  - name: customer_segmentation_report
+    type: analysis
+    description: "Marketing report for customer segmentation, LTV tiers, and churn risk"
+    depends_on:
+      - ref('gld_customer_analytics')
+      - ref('dim_customers')
+    owner:
+      name: "Marketing Analytics"
+      email: "marketing-analytics@example.com"
+
+  - name: product_performance_api
+    type: application
+    description: "Internal API serving product KPIs to the merchandising portal"
+    depends_on:
+      - ref('dim_products')
+      - ref('fct_orders')
+    owner:
+      name: "Platform Engineering"
+      email: "platform@example.com"

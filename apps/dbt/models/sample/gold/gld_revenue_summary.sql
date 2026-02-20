@@ -1,4 +1,12 @@
--- Gold layer: daily revenue summary with running totals
+-- Gold layer: daily revenue summary with running totals (incremental)
+
+{{
+  config(
+    materialized='incremental',
+    unique_key='order_date',
+    incremental_strategy='merge'
+  )
+}}
 
 SELECT
     order_date,
@@ -19,5 +27,8 @@ SELECT
         ORDER BY order_date
     )                                      AS cumulative_orders
 FROM {{ ref('fct_orders') }}
+{% if is_incremental() %}
+WHERE order_date > (SELECT MAX(order_date) FROM {{ this }})
+{% endif %}
 GROUP BY order_date
 ORDER BY order_date

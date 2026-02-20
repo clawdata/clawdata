@@ -14,5 +14,5 @@ SELECT
     weight_kg,
     created_date::DATE                     AS created_date,
     is_active
-FROM {{ source('raw', 'sample_products') }}
+FROM {{ ref('brz_products') }}
 WHERE is_active = true

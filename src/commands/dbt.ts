@@ -67,6 +67,47 @@ export async function dbtCommand(
       }
       return;
     }
+    case "lineage": {
+      const lineage = await dbtManager.getLineage();
+      if (jsonMode) {
+        output(lineage);
+        return;
+      }
+      if (!lineage.nodes.length) {
+        console.log("No model lineage found. Run `dbt compile` first.");
+        return;
+      }
+
+      // Build adjacency for ASCII rendering
+      const nameOf = (key: string) => lineage.nodes.find((n) => n.key === key)?.name || key;
+      const roots = new Set(lineage.nodes.map((n) => n.key));
+      for (const edge of lineage.edges) {
+        roots.delete(edge.to);
+      }
+
+      // Simple tree renderer
+      const children = new Map<string, string[]>();
+      for (const edge of lineage.edges) {
+        if (!children.has(edge.from)) children.set(edge.from, []);
+        children.get(edge.from)!.push(edge.to);
+      }
+
+      function printTree(node: string, prefix: string, isLast: boolean): void {
+        const connector = prefix === "" ? "" : isLast ? "└── " : "├── ";
+        console.log(`${prefix}${connector}${nameOf(node)}`);
+        const kids = children.get(node) || [];
+        kids.forEach((child, i) => {
+          const newPrefix = prefix === "" ? "" : prefix + (isLast ? "    " : "│   ");
+          printTree(child, newPrefix, i === kids.length - 1);
+        });
+      }
+
+      console.log("dbt model lineage:\n");
+      const rootList = [...roots];
+      rootList.forEach((root, i) => printTree(root, "", i === rootList.length - 1));
+      console.log(`\n${lineage.nodes.length} model(s), ${lineage.edges.length} edge(s)`);
+      return;
+    }
     default:
       if (sub) {
         console.error(`Error: Unknown dbt command: ${sub}\n`);
@@ -80,6 +121,7 @@ export async function dbtCommand(
       console.log("  docs                     Generate documentation site");
       console.log("  debug                    Verify dbt connection & config");
       console.log("  models                   List available models");
+      console.log("  lineage                  Show model dependency graph");
       console.log("\nExamples:");
       console.log("  clawdata dbt run");
       console.log("  clawdata dbt run --models slv_customers dim_customers");

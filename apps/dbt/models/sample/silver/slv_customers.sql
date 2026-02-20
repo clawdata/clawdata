@@ -21,7 +21,7 @@ WITH ranked AS (
             PARTITION BY LOWER(TRIM(email))
             ORDER BY updated_at DESC
         ) AS row_num
-    FROM {{ source('raw', 'sample_customers') }}
+    FROM {{ ref('brz_customers') }}
     WHERE email IS NOT NULL
       AND TRIM(email) != ''
       AND account_status != 'cancelled'

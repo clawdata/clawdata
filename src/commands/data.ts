@@ -29,8 +29,18 @@ export async function dataCommand(
     case "ingest": {
       const fileName = rest[0];
       if (!fileName) {
-        console.error("Error: Usage: data ingest <filename> [tablename]");
+        console.error("Error: Usage: data ingest <filename|glob> [tablename]");
         process.exit(1);
+      }
+      // Detect glob patterns
+      if (fileName.includes("*") || fileName.includes("?")) {
+        const result = await ingestor.ingestGlob(fileName);
+        if (jsonMode) {
+          output({ success: true, message: result });
+        } else {
+          console.log(result || "No matching files.");
+        }
+        return;
       }
       const result = await ingestor.ingestFile(fileName, rest[1]);
       if (jsonMode) {

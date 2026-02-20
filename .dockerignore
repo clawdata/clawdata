@@ -1,0 +1,10 @@
+node_modules
+build
+.git
+*.duckdb
+*.duckdb.wal
+apps/dbt/target
+apps/dbt/logs
+apps/dbt/dbt_packages
+apps/airflow/dags/__pycache__
+.clawdata

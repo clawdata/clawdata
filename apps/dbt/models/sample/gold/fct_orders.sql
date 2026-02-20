@@ -1,5 +1,13 @@
--- Gold layer: order fact table
+-- Gold layer: order fact table (incremental)
 -- Conformed fact linking to customer and product dimensions, with payment info
+
+{{
+  config(
+    materialized='incremental',
+    unique_key='order_id',
+    incremental_strategy='merge'
+  )
+}}
 
 WITH payment_agg AS (
     SELECT
@@ -34,3 +42,7 @@ SELECT
     o.created_at
 FROM {{ ref('slv_orders') }} o
 LEFT JOIN payment_agg p ON o.order_id = p.order_id
+
+{% if is_incremental() %}
+WHERE o.created_at > (SELECT MAX(created_at) FROM {{ this }})
+{% endif %}

@@ -11,11 +11,16 @@ import { DatabaseManager } from "./lib/database.js";
 import { DbtManager } from "./lib/dbt.js";
 import { DataIngestor } from "./lib/ingestor.js";
 import { TaskTracker } from "./lib/tasks.js";
-import { jsonMode, output, die } from "./lib/output.js";
+import { jsonMode, output, die, verbose } from "./lib/output.js";
 import { dataCommand } from "./commands/data.js";
 import { dbCommand } from "./commands/db.js";
 import { dbtCommand } from "./commands/dbt.js";
 import { doctorCommand } from "./commands/doctor.js";
+import { runCommand } from "./commands/run.js";
+import { initCommand } from "./commands/init.js";
+import { configCommand } from "./commands/config.js";
+import { completionsCommand } from "./commands/completions.js";
+import { watchCommand } from "./commands/watch.js";
 import { runInteractive, runNonInteractive } from "./tui/skills.js";
 import * as path from "path";
 
@@ -42,7 +47,10 @@ const dataIngestor = new DataIngestor(dbManager, taskTracker);
 
 // ── arg parsing ──────────────────────────────────────────────────────
 
-const argv = process.argv.filter((a) => a !== "--json");
+const argv = process.argv.filter((a) => a !== "--json" && a !== "--verbose" && a !== "-V");
+// Strip --format <val> pair
+const fmtIdx = argv.indexOf("--format");
+if (fmtIdx !== -1) argv.splice(fmtIdx, 2);
 const [, , cmd, sub, ...rest] = argv;
 
 // ── dispatch ─────────────────────────────────────────────────────────
@@ -57,6 +65,21 @@ async function main(): Promise<void> {
 
     case "dbt":
       return dbtCommand(sub, rest, dbtManager);
+
+    case "run":
+      return runCommand(sub, rest, dataIngestor, dbtManager, dbManager);
+
+    case "init":
+      return initCommand(sub, rest);
+
+    case "config":
+      return configCommand(sub, rest);
+
+    case "completions":
+      return completionsCommand(sub, rest);
+
+    case "watch":
+      return watchCommand([sub, ...rest].filter(Boolean));
 
     case "status": {
       const status = taskTracker.getStatus();
@@ -149,6 +172,11 @@ Database — query DuckDB directly:
   db info                      Show connection info and table count
   db tables                    List all tables
   db schema <table>            Show columns for a table
+  db sample <table> [n]        Show first N rows (default 5)
+  db profile <table>           Column-level stats (nulls, distinct, min, max)
+  db export "<sql>" [options]   Export results to CSV/JSON/Parquet
+  db diff <table>              Snapshot table or diff against previous snapshot
+  db dictionary [file]         Auto-generate a data dictionary (Markdown)
 
 dbt — run data transformations (silver → gold):
   dbt run   [--models m1 m2]   Materialise dbt models
@@ -158,6 +186,18 @@ dbt — run data transformations (silver → gold):
   dbt docs                     Generate dbt documentation site
   dbt debug                    Verify dbt connection & config
   dbt models                   List available models
+  dbt lineage                  Show model dependency graph
+
+Pipeline:
+  run                          Full pipeline: ingest → dbt run → dbt test
+  watch [dir] [--ext sql,py]   Watch dbt model files for changes
+
+Project:
+  init [dir]                   Scaffold a new ClawData project
+  config                       View all environment configuration
+  config get <KEY>             Print a single config value
+  config set <KEY> <VALUE>     Set a config value (saved to .clawdata)
+  completions <shell>          Generate shell completions (bash, zsh, fish)
 
 Setup & skills:
   setup                        Interactive first-run wizard — picks skills,
@@ -173,6 +213,8 @@ Other:
 
 Flags:
   --json                       Machine-readable JSON output
+  --format <fmt>               Output format: table, csv, json, markdown
+  --verbose, -V                Show detailed execution info
 
 Environment variables (all auto-detected, override if needed):
   CLAWDATA_ROOT                Project root

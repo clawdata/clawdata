@@ -8,7 +8,15 @@ const execAsync = promisify(exec);
 export interface DbtRunResult {
   success: boolean;
   output: string;
-  results?: any;
+  results?: Record<string, unknown>;
+}
+
+export interface DbtModelNode {
+  name: string;
+  resource_type: string;
+  depends_on?: { nodes?: string[] };
+  fqn?: string[];
+  path?: string;
 }
 
 export class DbtManager {
@@ -62,7 +70,7 @@ export class DbtManager {
     return this.runCommand("dbt snapshot");
   }
 
-  async getManifest(): Promise<any> {
+  async getManifest(): Promise<{ nodes?: Record<string, DbtModelNode>; error?: string }> {
     try {
       const manifestPath = path.join(this.projectDir, "target", "manifest.json");
       const content = await fs.readFile(manifestPath, "utf-8");
@@ -77,7 +85,7 @@ export class DbtManager {
     if (manifest.error) return [];
     return Object.entries(manifest.nodes || {})
       .filter(([key]) => key.startsWith("model."))
-      .map(([, node]) => (node as any).name);
+      .map(([, node]) => node.name);
   }
 
   async listTests(): Promise<string[]> {
@@ -85,6 +93,27 @@ export class DbtManager {
     if (manifest.error) return [];
     return Object.entries(manifest.nodes || {})
       .filter(([key]) => key.startsWith("test."))
-      .map(([, node]) => (node as any).name);
+      .map(([, node]) => node.name);
+  }
+
+  async getLineage(): Promise<{ nodes: { name: string; key: string }[]; edges: { from: string; to: string }[] }> {
+    const manifest = await this.getManifest();
+    if (manifest.error) return { nodes: [], edges: [] };
+
+    const modelNodes = Object.entries(manifest.nodes || {})
+      .filter(([key]) => key.startsWith("model."));
+
+    const nodes = modelNodes.map(([key, node]) => ({ name: node.name, key }));
+    const edges: { from: string; to: string }[] = [];
+
+    for (const [key, node] of modelNodes) {
+      for (const dep of node.depends_on?.nodes || []) {
+        if (dep.startsWith("model.")) {
+          edges.push({ from: dep, to: key });
+        }
+      }
+    }
+
+    return { nodes, edges };
   }
 }

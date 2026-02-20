@@ -1,3 +1,6 @@
+import * as fs from "fs/promises";
+import * as path from "path";
+
 export interface Task {
   id: string;
   name: string;
@@ -9,9 +12,70 @@ export interface Task {
   error?: string;
 }
 
+/** Serialisable form stored in JSON (Dates as ISO strings). */
+interface SerializedTask {
+  id: string;
+  name: string;
+  status: "pending" | "running" | "completed" | "failed";
+  startTime?: string;
+  endTime?: string;
+  progress?: number;
+  message?: string;
+  error?: string;
+}
+
 export class TaskTracker {
   private tasks: Map<string, Task> = new Map();
   private taskCounter = 0;
+  private persistPath: string | null = null;
+
+  /**
+   * Enable disk persistence.  Pass a directory (e.g. project root) and tasks
+   * will be saved to `<dir>/.clawdata/tasks.json`.
+   */
+  enablePersistence(rootDir: string): void {
+    this.persistPath = path.join(rootDir, ".clawdata", "tasks.json");
+  }
+
+  /** Load tasks from disk (if persistence is enabled and file exists). */
+  async load(): Promise<void> {
+    if (!this.persistPath) return;
+    try {
+      const raw = await fs.readFile(this.persistPath, "utf-8");
+      const data: SerializedTask[] = JSON.parse(raw);
+      for (const s of data) {
+        const task: Task = {
+          ...s,
+          startTime: s.startTime ? new Date(s.startTime) : undefined,
+          endTime: s.endTime ? new Date(s.endTime) : undefined,
+        };
+        this.tasks.set(task.id, task);
+      }
+      // Reset counter to max existing id
+      for (const t of this.tasks.values()) {
+        const m = t.id.match(/^task_(\d+)_/);
+        if (m) this.taskCounter = Math.max(this.taskCounter, parseInt(m[1], 10));
+      }
+    } catch {
+      // File doesn't exist or is invalid — start fresh
+    }
+  }
+
+  /** Save current tasks to disk (if persistence is enabled). */
+  async save(): Promise<void> {
+    if (!this.persistPath) return;
+    const dir = path.dirname(this.persistPath);
+    await fs.mkdir(dir, { recursive: true });
+    const data: SerializedTask[] = [];
+    this.tasks.forEach((t) => {
+      data.push({
+        ...t,
+        startTime: t.startTime?.toISOString(),
+        endTime: t.endTime?.toISOString(),
+      });
+    });
+    await fs.writeFile(this.persistPath, JSON.stringify(data, null, 2), "utf-8");
+  }
 
   createTask(name: string): string {
     const id = `task_${++this.taskCounter}_${Date.now()}`;

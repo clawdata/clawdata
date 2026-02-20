@@ -19,7 +19,7 @@
             "alias": "warehouse",
             "type": "file",
             "path": "/Users/seanpreusse/Documents/Dev/clawdata/data/warehouse.duckdb",
-            "attached": false,
+            "attached": true,
             "readOnly": false
         }
     ],

@@ -2,6 +2,7 @@ import * as fs from "fs/promises";
 import * as path from "path";
 import { DatabaseManager } from "./database.js";
 import { TaskTracker } from "./tasks.js";
+import { glob } from "./glob.js";
 
 export class DataIngestor {
   private dataFolder: string;
@@ -21,7 +22,9 @@ export class DataIngestor {
           f.endsWith(".csv") ||
           f.endsWith(".json") ||
           f.endsWith(".parquet") ||
-          f.endsWith(".jsonl")
+          f.endsWith(".jsonl") ||
+          f.endsWith(".xlsx") ||
+          f.endsWith(".xls")
       );
     } catch {
       return [];
@@ -49,6 +52,8 @@ export class DataIngestor {
         await this.dbManager.loadParquet(table, filePath);
       } else if (ext === ".json" || ext === ".jsonl") {
         await this.dbManager.loadJSON(table, filePath);
+      } else if (ext === ".xlsx" || ext === ".xls") {
+        await this.dbManager.loadExcel(table, filePath);
       } else {
         throw new Error(`Unsupported file type: ${ext}`);
       }
@@ -70,6 +75,27 @@ export class DataIngestor {
         results.push(await this.ingestFile(file));
       } catch (error) {
         results.push(`Failed to load ${file}: ${error}`);
+      }
+    }
+    return results.join("\n");
+  }
+
+  /**
+   * Ingest files matching a glob pattern.
+   * Patterns are resolved relative to DATA_FOLDER.
+   * Examples: "logs/*.json", "**\/*.csv", "orders_202?.csv"
+   */
+  async ingestGlob(pattern: string): Promise<string> {
+    const matches = await glob(pattern, this.dataFolder);
+    if (!matches.length) return `No files match pattern: ${pattern}`;
+
+    const results: string[] = [];
+    for (const absPath of matches) {
+      const fileName = path.relative(this.dataFolder, absPath);
+      try {
+        results.push(await this.ingestFile(fileName));
+      } catch (error) {
+        results.push(`Failed to load ${fileName}: ${error}`);
       }
     }
     return results.join("\n");

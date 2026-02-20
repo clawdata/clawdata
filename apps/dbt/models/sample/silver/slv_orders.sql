@@ -15,7 +15,7 @@ WITH order_lines AS (
         created_at::TIMESTAMP              AS created_at,
         SUM(line_total)                    AS subtotal,
         COUNT(*)                           AS line_count
-    FROM {{ source('raw', 'sample_orders') }}
+    FROM {{ ref('brz_orders') }}
     WHERE order_status NOT IN ('cancelled')
     GROUP BY
         order_id, customer_id, order_date, order_status,

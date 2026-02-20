@@ -18,7 +18,31 @@ clean-targets:
 models:
   openclaw_dbt:
     sample:
+      bronze:
+        +materialized: view
+        +schema: bronze
       silver:
         +materialized: table
+        +schema: silver
       gold:
         +materialized: table
+        +schema: gold
+
+seeds:
+  openclaw_dbt:
+    country_codes:
+      +column_types:
+        country_code: varchar
+        country_name: varchar
+        region: varchar
+    currency_codes:
+      +column_types:
+        currency_code: varchar
+        currency_name: varchar
+        symbol: varchar
+        decimal_places: integer
+    order_statuses:
+      +column_types:
+        order_status: varchar
+        description: varchar
+        is_terminal: boolean
