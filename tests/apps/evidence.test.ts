@@ -5,14 +5,15 @@ import * as path from "path";
 const EVIDENCE_DIR = path.resolve(import.meta.dirname, "../../apps/evidence");
 
 describe("Evidence analytics app", () => {
-  it("evidence.config.js exists", async () => {
-    const stat = await fs.stat(path.join(EVIDENCE_DIR, "evidence.config.js"));
+  it("evidence.config.yaml exists", async () => {
+    const stat = await fs.stat(path.join(EVIDENCE_DIR, "evidence.config.yaml"));
     expect(stat.isFile()).toBe(true);
   });
 
-  it("config sets title to ClawData Analytics", async () => {
-    const content = await fs.readFile(path.join(EVIDENCE_DIR, "evidence.config.js"), "utf-8");
-    expect(content).toContain("ClawData Analytics");
+  it("config contains plugins section", async () => {
+    const content = await fs.readFile(path.join(EVIDENCE_DIR, "evidence.config.yaml"), "utf-8");
+    expect(content).toContain("plugins");
+    expect(content).toContain("@evidence-dev/duckdb");
   });
 
   it("connection.yaml points to DuckDB warehouse", async () => {
