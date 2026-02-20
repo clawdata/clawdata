@@ -6,7 +6,7 @@ description: >
 metadata:
   openclaw:
     requires:
-      bins: [snowsql]
+      bins: [clawdata]
     primaryEnv: SNOWSQL_ACCOUNT
     tags: [database, snowflake, sql, cloud, warehouse]
 ---

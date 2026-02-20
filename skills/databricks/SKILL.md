@@ -6,7 +6,6 @@ metadata:
   openclaw:
     requires:
       bins: [clawdata]
-      env: [DATABRICKS_HOST, DATABRICKS_TOKEN]
     primaryEnv: DATABRICKS_HOST
     tags: [database, databricks, spark, sql, unity-catalog]
 ---

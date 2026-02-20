@@ -7,7 +7,6 @@ metadata:
   openclaw:
     requires:
       bins: [clawdata]
-      env: [FIVETRAN_API_KEY, FIVETRAN_API_SECRET]
     primaryEnv: FIVETRAN_API_KEY
     tags: [connectors, fivetran, airbyte, sync, ingestion]
 ---

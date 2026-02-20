@@ -6,7 +6,7 @@ description: >
 metadata:
   openclaw:
     requires:
-      bins: [clawdata, dbt, python3]
+      bins: [clawdata]
     primaryEnv: DBT_PROJECT_DIR
     tags: [dbt, transformation, etl, data-engineering, modeling]
 ---

@@ -6,7 +6,7 @@ description: >
 metadata:
   openclaw:
     requires:
-      bins: [dlt, clawdata]
+      bins: [clawdata]
     primaryEnv: DLT_DESTINATION
     tags: [ingestion, etl, connectors, api, dlt, pipeline]
 ---

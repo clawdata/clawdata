@@ -6,8 +6,7 @@ description: >
 metadata:
   openclaw:
     requires:
-      bins: [spark-submit, clawdata]
-      env: [SPARK_MASTER]
+      bins: [clawdata]
     primaryEnv: SPARK_MASTER
     tags: [compute, spark, big-data, clusters, sql]
 ---

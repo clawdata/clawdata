@@ -7,7 +7,6 @@ metadata:
   openclaw:
     requires:
       bins: [clawdata]
-      env: [METABASE_URL, METABASE_API_KEY]
     primaryEnv: METABASE_URL
     tags: [bi, metabase, superset, dashboards, charts, reporting]
 ---

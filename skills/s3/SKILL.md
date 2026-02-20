@@ -7,7 +7,6 @@ metadata:
   openclaw:
     requires:
       bins: [clawdata]
-      env: [AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY]
     primaryEnv: AWS_DEFAULT_REGION
     tags: [cloud, storage, s3, gcs, azure, blob, files]
 ---

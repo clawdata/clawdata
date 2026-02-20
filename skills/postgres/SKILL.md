@@ -6,8 +6,7 @@ description: >
 metadata:
   openclaw:
     requires:
-      bins: [clawdata, psql]
-      env: [POSTGRES_CONNECTION_STRING]
+      bins: [clawdata]
     primaryEnv: POSTGRES_CONNECTION_STRING
     tags: [database, postgres, postgresql, sql, query]
 ---

@@ -6,7 +6,7 @@ description: >
 metadata:
   openclaw:
     requires:
-      bins: [dagster, dagit, clawdata]
+      bins: [clawdata]
     primaryEnv: DAGSTER_HOME
     tags: [orchestration, dagster, assets, pipeline, scheduler]
 ---

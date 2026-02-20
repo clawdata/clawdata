@@ -7,7 +7,6 @@ metadata:
   openclaw:
     requires:
       bins: [clawdata]
-      env: [KAFKA_BOOTSTRAP_SERVERS]
     primaryEnv: KAFKA_BOOTSTRAP_SERVERS
     tags: [streaming, kafka, messages, topics, events]
 ---

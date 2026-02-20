@@ -6,7 +6,7 @@ description: >
 metadata:
   openclaw:
     requires:
-      bins: [great_expectations, clawdata]
+      bins: [clawdata]
     primaryEnv: GE_HOME
     tags: [quality, validation, testing, expectations, data-quality]
 ---

@@ -6,8 +6,7 @@ description: >
 metadata:
   openclaw:
     requires:
-      bins: [clawdata, bq]
-      env: [GOOGLE_APPLICATION_CREDENTIALS]
+      bins: [clawdata]
     primaryEnv: GOOGLE_APPLICATION_CREDENTIALS
     tags: [database, bigquery, gcp, sql, cloud]
 ---

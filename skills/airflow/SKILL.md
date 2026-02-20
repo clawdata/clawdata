@@ -6,7 +6,7 @@ description: >
 metadata:
   openclaw:
     requires:
-      bins: [airflow]
+      bins: [clawdata]
     primaryEnv: AIRFLOW_DAGS_FOLDER
     tags: [orchestration, airflow, pipeline, scheduling, workflow]
 ---
