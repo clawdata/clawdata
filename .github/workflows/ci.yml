@@ -64,8 +64,14 @@ jobs:
       - name: Install & build
         run: npm ci && npm run build
 
+      - name: Install dbt packages
+        run: dbt deps --project-dir apps/dbt --profiles-dir apps/dbt
+
       - name: Ingest sample data
         run: node build/cli.js data ingest-all
+
+      - name: dbt seed
+        run: node build/cli.js dbt seed
 
       - name: dbt run
         run: node build/cli.js dbt run
