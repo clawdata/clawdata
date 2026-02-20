@@ -66,23 +66,23 @@ Ideas and improvements for ClawData — organised by area.
 
 ### Documentation & Lineage
 - ✅ **`clawdata dbt lineage`** — print an ASCII DAG of the model dependency graph in the terminal
-- **Auto-serve docs** — `clawdata dbt docs --serve` to open the dbt docs site in a browser
+- ✅ **Auto-serve docs** — `clawdata dbt docs --serve` to open the dbt docs site in a browser
 - ✅ **Model descriptions** — add `description` fields to all silver/gold model columns in `schema.yml` (many are still empty)
 
 ### Multi-project
-- **Project templates** — let `clawdata init` create different starter dbt projects (e-commerce, SaaS metrics, financial reporting)
+- ✅ **Project templates** — let `clawdata init` create different starter dbt projects (e-commerce, SaaS metrics, financial reporting)
 - ✅ **dbt packages** — ship a `packages.yml` with useful packages pre-configured (`dbt-utils`, `dbt-expectations`, `dbt-date`)
 
 ---
 
 ## Airflow App Improvements
 
-- **Sensors** — add a `FileSensor` to `clawdata_etl` that waits for new files in `data/sample/` before triggering ingest
-- **Notifications** — on_failure callback that logs or sends a Slack/email alert
+- ✅ **Sensors** — add a `FileSensor` to `clawdata_etl` that waits for new files in `data/sample/` before triggering ingest
+- ✅ **Notifications** — on_failure callback that logs or sends a Slack/email alert
 - ✅ **TaskGroups** — group related tasks (e.g. all silver models, all gold models) for better DAG readability
-- **Dynamic DAGs** — generate tasks dynamically from the dbt manifest so each model runs as its own Airflow task with correct dependencies
+- ✅ **Dynamic DAGs** — generate tasks dynamically from the dbt manifest so each model runs as its own Airflow task with correct dependencies
 - **Docker-based operator** — `DockerOperator` or `KubernetesPodOperator` variants so the pipeline runs in isolated containers
-- **Environment-aware scheduling** — dev DAGs run on trigger only; prod DAGs on a schedule
+- ✅ **Environment-aware scheduling** — dev DAGs run on trigger only; prod DAGs on a schedule
 
 ---
 
@@ -128,8 +128,8 @@ Pre-built BI project with dashboards and saved questions mapped to the gold laye
 ## Developer Experience
 
 - **Plugin architecture** — let third parties add skills by publishing npm packages (`clawdata-skill-redshift`) that register via a config file
-- **Skill scaffolding** — `clawdata skill create <name>` to generate a new `SKILL.md` + folder structure
-- **Config file** — `clawdata.yml` at project root for all settings (replaces scattered env vars)
+- ✅ **Skill scaffolding** — `clawdata skill create <name>` to generate a new `SKILL.md` + folder structure
+- ✅ **Config file** — `clawdata.yml` at project root for all settings (replaces scattered env vars)
 - **Auto-update** — `clawdata update` to pull the latest skills and CLI from GitHub/npm
 - ✅ **Shell completions** — generate zsh/bash/fish completions for all commands and subcommands
 - ✅ **Progress bars** — show progress during data ingestion and dbt runs (especially for large datasets)
@@ -139,7 +139,7 @@ Pre-built BI project with dashboards and saved questions mapped to the gold laye
 
 ## Data & Sample Datasets
 
-- **More sample datasets** — add industry-specific datasets beyond e-commerce (SaaS metrics, IoT sensor data, financial transactions)
+- ✅ **More sample datasets** — add industry-specific datasets beyond e-commerce (SaaS metrics, IoT sensor data, financial transactions)
 - **Dataset marketplace** — `clawdata data add <dataset>` to download curated datasets from a registry
 - ✅ **Seed data management** — use dbt seeds for small reference tables (country codes, currency mappings) and ship them in `apps/dbt/seeds/`
 - ✅ **Data dictionary** — auto-generate a `DATA_DICTIONARY.md` from DuckDB `information_schema` + dbt descriptions
@@ -150,9 +150,9 @@ Pre-built BI project with dashboards and saved questions mapped to the gold laye
 ## Architecture & Infrastructure
 
 - **Multi-database support** — make `DatabaseManager` a proper adapter pattern so DuckDB, Postgres, Snowflake, and BigQuery share the same interface (queries, schema inspection, loading)
-- **Connection profiles** — `clawdata connect add prod --type snowflake --account …` to manage multiple database connections
+- ✅ **Connection profiles** — `clawdata connect add prod --type snowflake --account …` to manage multiple database connections
 - ✅ **Task persistence** — persist `TaskTracker` state to disk so task history survives CLI restarts
-- **Async task execution** — run long tasks (large ingests, full dbt runs) in the background and poll for status
+- ✅ **Async task execution** — run long tasks (large ingests, full dbt runs) in the background and poll for status
 - **HTTP API mode** — `clawdata serve` to expose the CLI as a REST API (useful for web UIs or non-OpenClaw integrations)
 - ✅ **Containerisation** — Dockerfile + docker-compose for the full stack (DuckDB, dbt, Airflow, ClawData CLI)
 - **Monorepo tooling** — add Turborepo or Nx for managing builds across `apps/` and `src/`

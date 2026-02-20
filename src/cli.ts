@@ -23,6 +23,8 @@ import { completionsCommand } from "./commands/completions.js";
 import { watchCommand } from "./commands/watch.js";
 import { logsCommand } from "./commands/logs.js";
 import { runInteractive, runNonInteractive } from "./tui/skills.js";
+import { skillCommand } from "./commands/skill.js";
+import { connectCommand } from "./commands/connect.js";
 import * as path from "path";
 
 const VERSION = "1.0.0";
@@ -119,6 +121,12 @@ async function main(): Promise<void> {
       return;
     }
 
+    case "skill":
+      return skillCommand(sub, rest);
+
+    case "connect":
+      return connectCommand(sub, rest);
+
     case "skills":
     case "tui": {
       if (sub === "--yes" || sub === "-y" || process.argv.includes("--yes")) {
@@ -210,6 +218,8 @@ Setup & skills:
                                installs dependencies, links to OpenClaw
   setup --yes                  Non-interactive: enable all detected skills
   skills                       Add or remove skill packs (dbt, Airflow, etc.)
+  skill create <name>          Scaffold a new skill folder with SKILL.md
+  skill list                   List available skills
   doctor                       Verify prerequisites & config
 
 Other:

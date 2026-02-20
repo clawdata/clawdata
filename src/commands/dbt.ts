@@ -44,9 +44,19 @@ export async function dbtCommand(
       return;
     }
     case "docs": {
-      const result = await dbtManager.docs();
-      if (jsonMode) { output(result); } else { console.log(result.output); }
-      if (!result.success) process.exit(1);
+      const serve = rest.includes("--serve");
+      const portIdx = rest.indexOf("--port");
+      const port = portIdx !== -1 ? parseInt(rest[portIdx + 1], 10) : 8080;
+      if (serve) {
+        console.log(`Generating docs and serving on http://localhost:${port} …`);
+        const result = await dbtManager.docsServe(port);
+        if (jsonMode) { output(result); } else { console.log(result.output); }
+        if (!result.success) process.exit(1);
+      } else {
+        const result = await dbtManager.docs();
+        if (jsonMode) { output(result); } else { console.log(result.output); }
+        if (!result.success) process.exit(1);
+      }
       return;
     }
     case "debug": {
@@ -118,7 +128,7 @@ export async function dbtCommand(
       console.log("  test  [--models m1 m2]   Run schema & data tests");
       console.log("  compile                  Compile models to raw SQL");
       console.log("  seed                     Load seed CSVs into DuckDB");
-      console.log("  docs                     Generate documentation site");
+      console.log("  docs [--serve] [--port N] Generate (and optionally serve) dbt documentation");
       console.log("  debug                    Verify dbt connection & config");
       console.log("  models                   List available models");
       console.log("  lineage                  Show model dependency graph");

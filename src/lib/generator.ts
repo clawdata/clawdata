@@ -106,3 +106,113 @@ export function generateSampleData(options: GenerateOptions): { files: string[] 
 
   return { files };
 }
+
+/* ── SaaS dataset ─────────────────────────────────────────────────── */
+
+const PLAN_NAMES = ['Free', 'Starter', 'Pro', 'Enterprise'];
+const PLAN_PRICES: Record<string, number> = { Free: 0, Starter: 29, Pro: 99, Enterprise: 499 };
+const BILLING_CYCLES = ['monthly', 'annual'];
+const EVENT_TYPES = ['login', 'page_view', 'feature_use', 'api_call', 'export', 'invite_sent'];
+const INVOICE_STATUSES = ['paid', 'pending', 'overdue', 'void'];
+const SUB_STATUSES = ['active', 'trialing', 'canceled', 'past_due'];
+
+function generateSaasUsers(rows: number, rand: () => number): string {
+  const lines = ['user_id,email,display_name,signup_date,company'];
+  const companies = ['Acme Corp', 'Globex Inc', 'Initech', 'Umbrella LLC', 'Wayne Enterprises', 'Stark Industries', 'Hooli', 'Pied Piper'];
+  for (let i = 1; i <= rows; i++) {
+    const first = pick(FIRST_NAMES, rand);
+    const last = pick(LAST_NAMES, rand);
+    const email = `${first.toLowerCase()}.${last.toLowerCase()}${i}@company.io`;
+    const company = pick(companies, rand);
+    const year = 2022 + Math.floor(rand() * 3);
+    const month = String(Math.floor(rand() * 12) + 1).padStart(2, '0');
+    const day = String(Math.floor(rand() * 28) + 1).padStart(2, '0');
+    lines.push(`${i},${email},${first} ${last},${year}-${month}-${day},${company}`);
+  }
+  return lines.join('\n') + '\n';
+}
+
+function generateSaasSubscriptions(rows: number, numUsers: number, rand: () => number): string {
+  const lines = ['subscription_id,user_id,plan,billing_cycle,status,start_date,mrr'];
+  for (let i = 1; i <= rows; i++) {
+    const userId = Math.floor(rand() * numUsers) + 1;
+    const plan = pick(PLAN_NAMES, rand);
+    const cycle = pick(BILLING_CYCLES, rand);
+    const status = pick(SUB_STATUSES, rand);
+    const year = 2022 + Math.floor(rand() * 3);
+    const month = String(Math.floor(rand() * 12) + 1).padStart(2, '0');
+    const day = String(Math.floor(rand() * 28) + 1).padStart(2, '0');
+    const mrr = cycle === 'annual'
+      ? (PLAN_PRICES[plan] * 0.8).toFixed(2)
+      : PLAN_PRICES[plan].toFixed(2);
+    lines.push(`SUB-${String(i).padStart(5, '0')},${userId},${plan},${cycle},${status},${year}-${month}-${day},${mrr}`);
+  }
+  return lines.join('\n') + '\n';
+}
+
+function generateSaasEvents(rows: number, numUsers: number, rand: () => number): string {
+  const lines = ['event_id,user_id,event_type,timestamp,properties'];
+  for (let i = 1; i <= rows; i++) {
+    const userId = Math.floor(rand() * numUsers) + 1;
+    const eventType = pick(EVENT_TYPES, rand);
+    const year = 2023 + Math.floor(rand() * 2);
+    const month = String(Math.floor(rand() * 12) + 1).padStart(2, '0');
+    const day = String(Math.floor(rand() * 28) + 1).padStart(2, '0');
+    const hour = String(Math.floor(rand() * 24)).padStart(2, '0');
+    const min = String(Math.floor(rand() * 60)).padStart(2, '0');
+    const props = `"{""source"":""web""}"`;
+    lines.push(`EVT-${String(i).padStart(6, '0')},${userId},${eventType},${year}-${month}-${day}T${hour}:${min}:00Z,${props}`);
+  }
+  return lines.join('\n') + '\n';
+}
+
+function generateSaasInvoices(rows: number, numUsers: number, rand: () => number): string {
+  const lines = ['invoice_id,user_id,amount,currency,status,issued_date,due_date'];
+  for (let i = 1; i <= rows; i++) {
+    const userId = Math.floor(rand() * numUsers) + 1;
+    const plan = pick(PLAN_NAMES, rand);
+    const amount = PLAN_PRICES[plan].toFixed(2);
+    const status = pick(INVOICE_STATUSES, rand);
+    const year = 2023 + Math.floor(rand() * 2);
+    const month = Math.floor(rand() * 12) + 1;
+    const day = String(Math.floor(rand() * 28) + 1).padStart(2, '0');
+    const issuedDate = `${year}-${String(month).padStart(2, '0')}-${day}`;
+    const dueMonth = month < 12 ? month + 1 : 1;
+    const dueYear = month < 12 ? year : year + 1;
+    const dueDate = `${dueYear}-${String(dueMonth).padStart(2, '0')}-${day}`;
+    lines.push(`INV-${String(i).padStart(5, '0')},${userId},${amount},USD,${status},${issuedDate},${dueDate}`);
+  }
+  return lines.join('\n') + '\n';
+}
+
+export function generateSaasData(options: GenerateOptions): { files: string[] } {
+  const { rows, outputDir, seed = 42 } = options;
+  const rand = prng(seed);
+
+  mkdirSync(outputDir, { recursive: true });
+
+  const userRows = Math.max(1, Math.ceil(rows * 0.2));
+  const subRows = Math.max(1, Math.ceil(rows * 0.3));
+  const eventRows = rows;
+  const invoiceRows = Math.max(1, Math.ceil(rows * 0.4));
+
+  const users = generateSaasUsers(userRows, rand);
+  const subscriptions = generateSaasSubscriptions(subRows, userRows, rand);
+  const events = generateSaasEvents(eventRows, userRows, rand);
+  const invoices = generateSaasInvoices(invoiceRows, userRows, rand);
+
+  const files: string[] = [];
+
+  const write = (name: string, data: string) => {
+    const p = join(outputDir, name);
+    writeFileSync(p, data);
+    files.push(p);
+  };
+
+  write('saas_users.csv', users);
+  write('saas_subscriptions.csv', subscriptions);
+  write('saas_events.csv', events);
+  write('saas_invoices.csv', invoices);
+
+  return { files };
+}

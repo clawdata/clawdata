@@ -62,6 +62,16 @@ export class DbtManager {
     return this.runCommand("dbt docs generate");
   }
 
+  async docsServe(port = 8080): Promise<DbtRunResult> {
+    const gen = await this.docs();
+    if (!gen.success) return gen;
+    return this.runCommand(`dbt docs serve --port ${port} --no-browser`);
+  }
+
+  get docsDir(): string {
+    return path.join(this.projectDir, "target");
+  }
+
   async seed(): Promise<DbtRunResult> {
     return this.runCommand("dbt seed");
   }

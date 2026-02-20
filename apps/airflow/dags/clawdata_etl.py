@@ -7,24 +7,74 @@ Scheduled daily with no backfill.
 
 from airflow import DAG
 from airflow.operators.bash import BashOperator
+from airflow.sensors.filesystem import FileSensor
 from airflow.utils.task_group import TaskGroup
 from datetime import datetime, timedelta
+import logging
+import os
+
+logger = logging.getLogger(__name__)
+
+
+def on_failure_callback(context):
+    """Log failure details and (optionally) send a Slack/email alert."""
+    task_instance = context.get("task_instance")
+    dag_id = context.get("dag").dag_id if context.get("dag") else "unknown"
+    task_id = task_instance.task_id if task_instance else "unknown"
+    execution_date = context.get("execution_date", "unknown")
+    exception = context.get("exception", "N/A")
+
+    message = (
+        f"[ALERT] Task failed — dag={dag_id} task={task_id} "
+        f"execution_date={execution_date} error={exception}"
+    )
+    logger.error(message)
+
+    # Extend here: send Slack webhook, email via SES/SMTP, PagerDuty, etc.
+    # Example:
+    #   requests.post(SLACK_WEBHOOK_URL, json={"text": message})
+
+
+# ── Environment-aware scheduling ──────────────────────────────────
+
+ENV = os.environ.get("CLAWDATA_ENV", "dev").lower()
+
+# dev  → manual trigger only (schedule=None), fewer retries
+# prod → daily schedule, more retries
+if ENV == "prod":
+    DAG_SCHEDULE = "@daily"
+    DAG_RETRIES = 2
+else:
+    DAG_SCHEDULE = None
+    DAG_RETRIES = 0
 
 default_args = {
     "owner": "clawdata",
-    "retries": 1,
+    "retries": DAG_RETRIES,
     "retry_delay": timedelta(minutes=5),
+    "on_failure_callback": on_failure_callback,
 }
 
 with DAG(
     dag_id="clawdata_etl",
     description="Full clawdata pipeline: ingest → dbt run → dbt test",
     start_date=datetime(2026, 1, 1),
-    schedule="@daily",
+    schedule=DAG_SCHEDULE,
     catchup=False,
     default_args=default_args,
-    tags=["clawdata", "etl"],
+    tags=["clawdata", "etl", ENV],
 ) as dag:
+
+    # ── File Sensor ──────────────────────────────────────────────────
+
+    wait_for_data = FileSensor(
+        task_id="wait_for_data",
+        filepath="data/sample/",
+        fs_conn_id="fs_default",
+        poke_interval=60,
+        timeout=600,
+        mode="poke",
+    )
 
     # ── Ingest ──────────────────────────────────────────────────────
 
@@ -69,4 +119,4 @@ with DAG(
 
     # ── DAG dependencies ────────────────────────────────────────────
 
-    ingest_group >> transform_group >> quality_group
+    wait_for_data >> ingest_group >> transform_group >> quality_group

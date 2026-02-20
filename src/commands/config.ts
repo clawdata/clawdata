@@ -8,6 +8,13 @@
 import * as fs from "fs/promises";
 import * as path from "path";
 import { jsonMode, output, table as outputTable, die } from "../lib/output.js";
+import {
+  loadConfig,
+  saveConfig,
+  configFilePath,
+  applyConfigToEnv,
+  type ClawdataConfig,
+} from "../lib/config.js";
 
 /** Config keys that ClawData understands. */
 export const CONFIG_KEYS = [
@@ -135,6 +142,71 @@ export async function configCommand(
       return;
     }
 
+    case "init-file": {
+      const cfgPath = configFilePath();
+      try {
+        await fs.access(cfgPath);
+        if (jsonMode) {
+          output({ created: false, path: cfgPath, reason: "already exists" });
+        } else {
+          console.log(`Config file already exists: ${cfgPath}`);
+        }
+        return;
+      } catch {
+        // Doesn't exist yet — create it
+      }
+      const defaults: ClawdataConfig = {
+        project: { name: path.basename(process.cwd()), version: "1.0" },
+        paths: {
+          db_path: "data/warehouse.duckdb",
+          data_folder: "data/sample",
+          dbt_project_dir: "apps/dbt",
+          dbt_profiles_dir: "apps/dbt",
+        },
+        skills: ["dbt", "duckdb"],
+      };
+      const saved = await saveConfig(defaults);
+      if (jsonMode) {
+        output({ created: true, path: saved });
+      } else {
+        console.log(`✓ Created ${saved}`);
+      }
+      return;
+    }
+
+    case "show-file": {
+      const cfg = await loadConfig();
+      if (!cfg) {
+        if (jsonMode) {
+          output({ exists: false });
+        } else {
+          console.log("No clawdata.yml found. Create one with: clawdata config init-file");
+        }
+        return;
+      }
+      if (jsonMode) {
+        output(cfg);
+      } else {
+        const raw = await fs.readFile(configFilePath(), "utf-8");
+        console.log(raw);
+      }
+      return;
+    }
+
+    case "apply": {
+      const cfg = await loadConfig();
+      if (!cfg) {
+        die("No clawdata.yml found. Create one with: clawdata config init-file");
+      }
+      const count = applyConfigToEnv(cfg);
+      if (jsonMode) {
+        output({ applied: count });
+      } else {
+        console.log(`✓ Applied ${count} setting(s) from clawdata.yml to environment`);
+      }
+      return;
+    }
+
     case "help":
     case "--help":
     case "-h":
@@ -165,6 +237,9 @@ function printConfigHelp(): void {
   console.log("  get <KEY>          Print a single value");
   console.log("  set <KEY> <VALUE>  Set a value (saved to .clawdata file)");
   console.log("  path               Print path to .clawdata dotfile");
+  console.log("  init-file          Generate a clawdata.yml config file");
+  console.log("  show-file          Show contents of clawdata.yml");
+  console.log("  apply              Apply clawdata.yml paths to environment");
   console.log("\nConfig keys:");
   CONFIG_KEYS.forEach((k) => console.log(`  ${k}`));
 }

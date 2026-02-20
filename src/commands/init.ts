@@ -7,6 +7,7 @@
 import * as fs from "fs/promises";
 import * as path from "path";
 import { jsonMode, output } from "../lib/output.js";
+import { getTemplate, listTemplates, renderSourcesYml, type ProjectTemplate } from "../lib/templates.js";
 
 interface InitResult {
   directory: string;
@@ -87,14 +88,29 @@ export async function initCommand(
   rest: string[]
 ): Promise<void> {
   if (sub === "help" || sub === "--help" || sub === "-h") {
-    console.log("Usage: clawdata init [directory]\n");
+    console.log("Usage: clawdata init [directory] [--template <name>]\n");
     console.log("Scaffold a new ClawData project.\n");
     console.log("If no directory is given, the current directory is used.");
-    console.log("Creates: data/, apps/dbt/ (with starter models), skills/");
+    console.log("Creates: data/, apps/dbt/ (with starter models), skills/\n");
+    console.log("Templates: " + listTemplates().join(", "));
     return;
   }
 
-  const targetDir = path.resolve(sub || rest[0] || ".");
+  // Parse --template flag
+  const allArgs = [sub, ...rest].filter(Boolean) as string[];
+  const tplIdx = allArgs.indexOf("--template");
+  const tplName = tplIdx !== -1 ? allArgs[tplIdx + 1] : "ecommerce";
+  const dirArg = tplIdx !== -1
+    ? allArgs.filter((_a, i) => i !== tplIdx && i !== tplIdx + 1)[0]
+    : allArgs[0];
+
+  const template = getTemplate(tplName || "ecommerce");
+  if (!template) {
+    console.error(`Unknown template: ${tplName}. Available: ${listTemplates().join(", ")}`);
+    process.exit(1);
+  }
+
+  const targetDir = path.resolve(dirArg || ".");
   const result: InitResult = { directory: targetDir, created: [], skipped: [] };
 
   const dirs = [
@@ -114,14 +130,18 @@ export async function initCommand(
   const files: Record<string, string> = {
     "apps/dbt/dbt_project.yml": DBI_PROJECT_YML,
     "apps/dbt/profiles.yml": DBT_PROFILES_YML,
-    "apps/dbt/models/sample/_sources.yml": SOURCES_YML,
+    "apps/dbt/models/sample/_sources.yml": renderSourcesYml(template),
     "apps/dbt/models/sample/schema.yml": SCHEMA_YML,
-    "apps/dbt/models/sample/bronze/brz_customers.sql": SAMPLE_BRONZE,
     "apps/dbt/seeds/.gitkeep": GITKEEP,
     "apps/dbt/snapshots/.gitkeep": GITKEEP,
     "apps/airflow/dags/.gitkeep": GITKEEP,
     "data/sample/.gitkeep": GITKEEP,
   };
+
+  // Add template-specific bronze models
+  for (const [filename, sql] of Object.entries(template.bronzeModels)) {
+    files[`apps/dbt/models/sample/bronze/${filename}`] = sql;
+  }
 
   // Create directories
   for (const dir of dirs) {
