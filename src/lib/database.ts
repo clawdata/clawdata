@@ -197,6 +197,47 @@ export class DatabaseManager {
     await this.execute(`CREATE OR REPLACE TABLE ${tableName} AS SELECT * FROM st_read('${filePath}'${layer})`);
   }
 
+  /**
+   * Load data from a remote URL. DuckDB's httpfs extension handles
+   * http://, https://, and s3:// paths natively.
+   * Format is auto-detected from the URL extension.
+   */
+  async loadURL(tableName: string, url: string): Promise<void> {
+    if (this.config.type !== "duckdb") throw new Error(`URL loading not implemented for ${this.config.type}`);
+    await this.execute("INSTALL httpfs; LOAD httpfs;");
+    const lower = url.toLowerCase();
+    let readFn: string;
+    if (lower.endsWith(".parquet")) {
+      readFn = `read_parquet('${url}')`;
+    } else if (lower.endsWith(".json") || lower.endsWith(".jsonl") || lower.endsWith(".ndjson")) {
+      readFn = `read_json_auto('${url}')`;
+    } else {
+      // Default to CSV for .csv or unknown extensions
+      readFn = `read_csv_auto('${url}', header=true)`;
+    }
+    await this.execute(`CREATE OR REPLACE TABLE ${tableName} AS SELECT * FROM ${readFn}`);
+  }
+
+  /**
+   * Infer the schema of a file without fully loading it.
+   * Returns column names and detected types.
+   */
+  async inferSchema(filePath: string): Promise<{ column_name: string; data_type: string }[]> {
+    if (this.config.type !== "duckdb") throw new Error(`Schema inference not implemented for ${this.config.type}`);
+    const ext = filePath.toLowerCase();
+    let readFn: string;
+    if (ext.endsWith(".parquet")) {
+      readFn = `read_parquet('${filePath}')`;
+    } else if (ext.endsWith(".json") || ext.endsWith(".jsonl") || ext.endsWith(".ndjson")) {
+      readFn = `read_json_auto('${filePath}')`;
+    } else {
+      readFn = `read_csv_auto('${filePath}', header=true)`;
+    }
+    return this.query<{ column_name: string; data_type: string }>(
+      `SELECT column_name, column_type AS data_type FROM (DESCRIBE SELECT * FROM ${readFn})`
+    );
+  }
+
   async reset(): Promise<string> {
     const dbPath = this.config.path!;
     await this.close();

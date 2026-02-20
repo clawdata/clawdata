@@ -38,12 +38,19 @@ models:
         description: "Unique order identifier"
         tests: [unique, not_null]
       - name: customer_id
+        description: "FK to slv_customers"
         tests: [not_null]
       - name: total_amount
         description: "Fully calculated total (net + tax + shipping)"
-        tests: [not_null]
-      - name: order_status
         tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: ">= 0"
+      - name: order_status
+        description: "Current order fulfilment status"
+        tests:
+          - not_null
+          - dbt_utils.not_constant
           - accepted_values:
               arguments:
                 values: ['completed', 'shipped', 'pending', 'refunded']
@@ -55,12 +62,16 @@ models:
         description: "Composite key (order_id-line_id)"
         tests: [unique, not_null]
       - name: order_id
+        description: "FK to slv_orders"
         tests: [not_null]
       - name: product_sku
+        description: "FK to slv_products"
         tests: [not_null]
       - name: quantity
+        description: "Number of units ordered"
         tests: [not_null]
       - name: line_total
+        description: "Quantity × unit price for this line"
         tests: [not_null]
 
   - name: slv_products
@@ -68,27 +79,43 @@ models:
     columns:
       - name: product_sku
         description: "Product SKU"
-        tests: [unique, not_null]
+        tests:
+          - unique
+          - not_null
+          - dbt_utils.at_least_one
       - name: product_name
-        tests: [not_null]
+        description: "Human-readable product name"
+        tests:
+          - not_null
+          - dbt_utils.not_constant
       - name: category
-        tests: [not_null]
+        description: "Product category (e.g. Electronics, Clothing)"
+        tests:
+          - not_null
+          - dbt_utils.at_least_one
       - name: margin_pct
         description: "Profit margin percentage"
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: ">= 0 AND margin_pct <= 100"
 
   - name: slv_payments
     description: "Validated payment transactions — excludes failed payments"
     columns:
       - name: transaction_id
+        description: "Unique payment transaction identifier"
         tests: [unique, not_null]
       - name: order_id
+        description: "FK to slv_orders"
         tests: [not_null]
       - name: payment_method
+        description: "Payment instrument used (Credit Card, PayPal, etc.)"
         tests:
           - accepted_values:
               arguments:
                 values: ['Credit Card', 'PayPal', 'Bank Transfer', 'Apple Pay']
       - name: payment_status
+        description: "Settlement status of the transaction"
         tests:
           - accepted_values:
               arguments:
@@ -98,12 +125,17 @@ models:
 
   - name: dim_customers
     description: "Customer dimension with lifetime value and segmentation"
+    tests:
+      - row_count_positive
     columns:
       - name: customer_id
+        description: "Surrogate key for the customer dimension"
         tests: [unique, not_null]
       - name: customer_segment
         description: "Prospect / New / Active / Loyal / VIP"
         tests:
+          - not_null
+          - dbt_utils.at_least_one
           - accepted_values:
               arguments:
                 values: ['Prospect', 'New', 'Active', 'Loyal', 'VIP']
@@ -112,18 +144,39 @@ models:
 
   - name: dim_products
     description: "Product dimension with sales volume and profit metrics"
+    tests:
+      - row_count_positive
     columns:
       - name: product_sku
-        tests: [unique, not_null]
+        description: "Surrogate key for the product dimension"
+        tests:
+          - unique
+          - not_null
+          - dbt_utils.at_least_one
       - name: total_revenue
         description: "Lifetime revenue from this product"
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: ">= 0"
+      - name: product_name
+        description: "Human-readable product name"
+        tests:
+          - not_null
+          - dbt_utils.not_constant
 
   - name: fct_orders
     description: "Order fact table with payment information"
+    tests:
+      - row_count_positive
     columns:
       - name: order_id
-        tests: [unique, not_null]
+        description: "Unique order key (degenerate dimension)"
+        tests:
+          - unique
+          - not_null
+          - dbt_utils.at_least_one
       - name: customer_id
+        description: "FK to dim_customers"
         tests:
           - not_null
           - relationships:
@@ -131,21 +184,51 @@ models:
                 to: ref('dim_customers')
                 field: customer_id
       - name: total_amount
-        tests: [not_null]
+        description: "Total order value in base currency"
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: "> 0"
 
   - name: gld_customer_analytics
     description: "Wide customer analytics — segments, spend, top categories"
+    tests:
+      - row_count_positive
     columns:
       - name: customer_id
-        tests: [unique, not_null]
+        description: "FK to dim_customers — one row per customer"
+        tests:
+          - unique
+          - not_null
+          - dbt_utils.at_least_one
+      - name: total_spend
+        description: "Lifetime spend by this customer"
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: ">= 0"
 
   - name: gld_revenue_summary
     description: "Daily revenue summary with running totals"
+    tests:
+      - row_count_positive
     columns:
       - name: order_date
-        tests: [unique, not_null]
+        description: "Calendar date of orders (grain of the summary)"
+        tests:
+          - unique
+          - not_null
+          - dbt_utils.at_least_one
       - name: total_collected
-        tests: [not_null]
+        description: "Sum of collected revenue for the day"
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: ">= 0"
+      - name: order_count
+        description: "Number of orders placed on this date"
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: "> 0"
 
 exposures:
 

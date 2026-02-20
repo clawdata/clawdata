@@ -81,6 +81,44 @@ export class DataIngestor {
   }
 
   /**
+   * Ingest a file from a remote URL (http://, https://, s3://).
+   * Table name is derived from the URL filename or can be supplied.
+   */
+  async ingestURL(url: string, tableName?: string): Promise<string> {
+    const taskId = this.taskTracker.createTask(`Ingest URL ${url}`);
+    try {
+      this.taskTracker.startTask(taskId, `Downloading: ${url}`);
+      // Derive table name from URL path
+      const urlPath = new URL(url).pathname;
+      const baseName = path.basename(urlPath);
+      const table = tableName || path.parse(baseName || "remote_data").name.replace(/[^a-zA-Z0-9_]/g, "_");
+
+      this.taskTracker.updateTask(taskId, 30, `Loading into table: ${table}`);
+      await this.dbManager.loadURL(table, url);
+      this.taskTracker.completeTask(taskId, `Successfully loaded ${url} into table ${table}`);
+      return `Successfully loaded ${url} into table ${table}`;
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      this.taskTracker.failTask(taskId, errorMsg);
+      throw error;
+    }
+  }
+
+  /** Check if a string looks like a URL. */
+  static isURL(input: string): boolean {
+    return /^https?:\/\//.test(input) || input.startsWith("s3://");
+  }
+
+  /**
+   * Preview inferred schema for a file without loading it.
+   * Returns column names and detected types.
+   */
+  async previewSchema(fileName: string): Promise<{ column_name: string; data_type: string }[]> {
+    const filePath = path.join(this.dataFolder, fileName);
+    return this.dbManager.inferSchema(filePath);
+  }
+
+  /**
    * Ingest files matching a glob pattern.
    * Patterns are resolved relative to DATA_FOLDER.
    * Examples: "logs/*.json", "**\/*.csv", "orders_202?.csv"

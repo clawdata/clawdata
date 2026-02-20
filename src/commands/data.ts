@@ -4,7 +4,8 @@
 
 import { DatabaseManager } from "../lib/database.js";
 import { DataIngestor } from "../lib/ingestor.js";
-import { jsonMode, output } from "../lib/output.js";
+import { jsonMode, output, table } from "../lib/output.js";
+import { generateSampleData } from "../lib/generator.js";
 
 export async function dataCommand(
   sub: string | undefined,
@@ -29,8 +30,18 @@ export async function dataCommand(
     case "ingest": {
       const fileName = rest[0];
       if (!fileName) {
-        console.error("Error: Usage: data ingest <filename|glob> [tablename]");
+        console.error("Error: Usage: data ingest <filename|glob|url> [tablename]");
         process.exit(1);
+      }
+      // Detect URLs
+      if (DataIngestor.isURL(fileName)) {
+        const result = await ingestor.ingestURL(fileName, rest[1]);
+        if (jsonMode) {
+          output({ success: true, message: result });
+        } else {
+          console.log(`✓ ${result}`);
+        }
+        return;
       }
       // Detect glob patterns
       if (fileName.includes("*") || fileName.includes("?")) {
@@ -59,6 +70,21 @@ export async function dataCommand(
       }
       return;
     }
+    case "preview": {
+      const fileName = rest[0];
+      if (!fileName) {
+        console.error("Error: Usage: data preview <filename>");
+        process.exit(1);
+      }
+      const schema = await ingestor.previewSchema(fileName);
+      if (jsonMode) {
+        output({ file: fileName, columns: schema });
+      } else {
+        console.log(`Inferred schema for ${fileName}:\n`);
+        table(schema as unknown as Record<string, unknown>[]);
+      }
+      return;
+    }
     case "reset": {
       if (!dbManager) {
         console.error("Error: Database manager not available.");
@@ -73,16 +99,34 @@ export async function dataCommand(
       }
       return;
     }
+    case "generate": {
+      const rows = parseInt(rest[0] || "100", 10);
+      const dir = rest[1] || "data/sample";
+      if (isNaN(rows) || rows < 1) {
+        console.error("Error: --rows must be a positive integer.");
+        process.exit(1);
+      }
+      const { files } = generateSampleData({ rows, outputDir: dir });
+      if (jsonMode) {
+        output({ rows, outputDir: dir, files });
+      } else {
+        console.log(`✓ Generated ${rows} rows of sample data:`);
+        files.forEach(f => console.log(`  • ${f}`));
+      }
+      return;
+    }
     default:
       if (sub) {
         console.error(`Error: Unknown data command: ${sub}\n`);
       }
       console.log("Usage: clawdata data <command>\n");
       console.log("Commands:");
-      console.log("  list          List data files available for ingestion");
-      console.log("  ingest <file> Load a single file into DuckDB [tablename]");
-      console.log("  ingest-all    Load all data files into DuckDB");
-      console.log("  reset         Delete the DuckDB warehouse and start fresh");
+      console.log("  list               List data files available for ingestion");
+      console.log("  ingest <file>      Load a single file into DuckDB [tablename]");
+      console.log("  ingest-all         Load all data files into DuckDB");
+      console.log("  preview <file>     Infer schema without loading");
+      console.log("  generate [rows]    Generate synthetic e-commerce data");
+      console.log("  reset              Delete the DuckDB warehouse and start fresh");
       console.log("\nExamples:");
       console.log("  clawdata data list");
       console.log("  clawdata data ingest sample_customers.csv");

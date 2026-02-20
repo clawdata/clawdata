@@ -21,6 +21,7 @@ import { initCommand } from "./commands/init.js";
 import { configCommand } from "./commands/config.js";
 import { completionsCommand } from "./commands/completions.js";
 import { watchCommand } from "./commands/watch.js";
+import { logsCommand } from "./commands/logs.js";
 import { runInteractive, runNonInteractive } from "./tui/skills.js";
 import * as path from "path";
 
@@ -80,6 +81,9 @@ async function main(): Promise<void> {
 
     case "watch":
       return watchCommand([sub, ...rest].filter(Boolean));
+
+    case "logs":
+      return logsCommand(sub, rest);
 
     case "status": {
       const status = taskTracker.getStatus();
@@ -191,6 +195,8 @@ dbt — run data transformations (silver → gold):
 Pipeline:
   run                          Full pipeline: ingest → dbt run → dbt test
   watch [dir] [--ext sql,py]   Watch dbt model files for changes
+  logs tail [source] [n]       View recent logs (dbt, cli, airflow)
+  logs grep <pattern>          Search across all log sources
 
 Project:
   init [dir]                   Scaffold a new ClawData project

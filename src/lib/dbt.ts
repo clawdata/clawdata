@@ -70,6 +70,10 @@ export class DbtManager {
     return this.runCommand("dbt snapshot");
   }
 
+  async sourceFreshness(): Promise<DbtRunResult> {
+    return this.runCommand("dbt source freshness");
+  }
+
   async getManifest(): Promise<{ nodes?: Record<string, DbtModelNode>; error?: string }> {
     try {
       const manifestPath = path.join(this.projectDir, "target", "manifest.json");

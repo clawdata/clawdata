@@ -36,16 +36,16 @@ Ideas and improvements for ClawData — organised by area.
 
 ### Data Ingestion
 - ✅ **Glob / directory ingestion** — `clawdata data ingest "logs/*.json"` to load multiple files matching a pattern
-- **Remote file support** — ingest from URLs or S3 paths (`clawdata data ingest https://example.com/data.csv`)
-- **Schema inference preview** — show inferred types before loading so the user can confirm or override
-- **Incremental ingestion** — detect already-loaded files and skip them (track checksums / modified timestamps)
+- ✅ **Remote file support** — ingest from URLs or S3 paths (`clawdata data ingest https://example.com/data.csv`)
+- ✅ **Schema inference preview** — show inferred types before loading so the user can confirm or override
+- ✅ **Incremental ingestion** — detect already-loaded files and skip them (track checksums / modified timestamps)
 - ✅ **Excel support** — `.xlsx` / `.xls` ingestion via DuckDB's `spatial` or `excel` extension
 
 ### Workflow
 - ✅ **`clawdata init`** — scaffold a new project from scratch (create `data/`, `apps/dbt/`, sample models, profiles, skills config)
 - ✅ **`clawdata run`** — one-command full pipeline: ingest → dbt run → dbt test (similar to the Airflow ETL DAG but local)
 - ✅ **`clawdata watch`** — file watcher that re-runs affected dbt models when `.sql` files change
-- **`clawdata logs`** — unified log viewer across CLI runs, dbt, and Airflow
+- ✅ **`clawdata logs`** — unified log viewer across CLI runs, dbt, and Airflow
 - ✅ **`clawdata config`** — view/edit environment config (`DB_PATH`, `DATA_FOLDER`, etc.) without touching env vars directly
 
 ---
@@ -59,15 +59,15 @@ Ideas and improvements for ClawData — organised by area.
 - ✅ **Custom schema per layer** — write bronze/silver/gold to separate DuckDB schemas (`bronze.*`, `silver.*`, `gold.*`) for clarity
 
 ### Testing & Quality
-- **dbt-utils integration** — add common tests: `expression_is_true`, `at_least_one`, `not_constant` across all models
-- **Freshness checks** — add `loaded_at_field` to sources and run `dbt source freshness`
-- **Row-count assertions** — ensure gold tables are never empty after a run
+- ✅ **dbt-utils integration** — add common tests: `expression_is_true`, `at_least_one`, `not_constant` across all models
+- ✅ **Freshness checks** — add `loaded_at_field` to sources and run `dbt source freshness`
+- ✅ **Row-count assertions** — ensure gold tables are never empty after a run
 - ✅ **dbt exposures** — define downstream consumers (dashboards, reports) in `schema.yml`
 
 ### Documentation & Lineage
 - ✅ **`clawdata dbt lineage`** — print an ASCII DAG of the model dependency graph in the terminal
 - **Auto-serve docs** — `clawdata dbt docs --serve` to open the dbt docs site in a browser
-- **Model descriptions** — add `description` fields to all silver/gold model columns in `schema.yml` (many are still empty)
+- ✅ **Model descriptions** — add `description` fields to all silver/gold model columns in `schema.yml` (many are still empty)
 
 ### Multi-project
 - **Project templates** — let `clawdata init` create different starter dbt projects (e-commerce, SaaS metrics, financial reporting)
@@ -120,7 +120,7 @@ Pre-built BI project with dashboards and saved questions mapped to the gold laye
 - ✅ **Unit tests** — test suite for `DatabaseManager`, `DataIngestor`, `DbtManager`, and `TaskTracker` (vitest, 66 tests across 6 files)
 - ✅ **Integration tests** — end-to-end: ingest sample data → query tables and assert expected values
 - ✅ **CI pipeline** — GitHub Actions workflow: install → build → test → dbt run on every PR
-- **Linting** — add ESLint + Prettier for TypeScript; SQLFluff for dbt SQL models
+- ✅ **Linting** — add ESLint + Prettier for TypeScript; SQLFluff for dbt SQL models
 - ✅ **Type safety** — replaced `any` types in `DatabaseManager` and `DbtManager` with proper interfaces (`DatabaseInfo`, `TableInfo`, `ColumnInfo`, `ColumnProfile`, `DbtModelNode`)
 
 ---
@@ -132,7 +132,7 @@ Pre-built BI project with dashboards and saved questions mapped to the gold laye
 - **Config file** — `clawdata.yml` at project root for all settings (replaces scattered env vars)
 - **Auto-update** — `clawdata update` to pull the latest skills and CLI from GitHub/npm
 - ✅ **Shell completions** — generate zsh/bash/fish completions for all commands and subcommands
-- **Progress bars** — show progress during data ingestion and dbt runs (especially for large datasets)
+- ✅ **Progress bars** — show progress during data ingestion and dbt runs (especially for large datasets)
 - ✅ **Verbose mode** — `--verbose` / `-V` flag for debugging (writes to stderr with `[verbose]` prefix)
 
 ---
@@ -143,7 +143,7 @@ Pre-built BI project with dashboards and saved questions mapped to the gold laye
 - **Dataset marketplace** — `clawdata data add <dataset>` to download curated datasets from a registry
 - ✅ **Seed data management** — use dbt seeds for small reference tables (country codes, currency mappings) and ship them in `apps/dbt/seeds/`
 - ✅ **Data dictionary** — auto-generate a `DATA_DICTIONARY.md` from DuckDB `information_schema` + dbt descriptions
-- **Sample data generator** — `clawdata data generate --rows 10000` to create realistic synthetic data at scale for performance testing
+- ✅ **Sample data generator** — `clawdata data generate --rows 10000` to create realistic synthetic data at scale for performance testing
 
 ---
 
