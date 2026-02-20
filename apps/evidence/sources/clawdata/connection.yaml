@@ -1,0 +1,4 @@
+name: clawdata
+type: duckdb
+options:
+  filename: ../../data/warehouse.duckdb

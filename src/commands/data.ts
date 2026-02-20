@@ -6,6 +6,7 @@ import { DatabaseManager } from "../lib/database.js";
 import { DataIngestor } from "../lib/ingestor.js";
 import { jsonMode, output, table } from "../lib/output.js";
 import { generateSampleData } from "../lib/generator.js";
+import { downloadDataset, marketplaceCommand } from "../lib/marketplace.js";
 
 export async function dataCommand(
   sub: string | undefined,
@@ -115,6 +116,29 @@ export async function dataCommand(
       }
       return;
     }
+    case "add": {
+      const datasetId = rest[0];
+      if (!datasetId) {
+        console.error("Error: Usage: clawdata data add <dataset-id>");
+        console.error("Run 'clawdata data marketplace' to see available datasets.");
+        process.exit(1);
+      }
+      const targetDir = rest[1] || "data/sample";
+      const result = await downloadDataset(datasetId, targetDir);
+      if (jsonMode) {
+        output({ dataset: datasetId, ...result });
+      } else {
+        console.log(`✓ Dataset '${datasetId}' added to ${targetDir}/`);
+        result.files.forEach(f => console.log(`  • ${f}`));
+      }
+      return;
+    }
+    case "marketplace": {
+      const marketplaceSub = rest[0];
+      const marketplaceRest = rest.slice(1);
+      await marketplaceCommand(marketplaceSub, marketplaceRest);
+      return;
+    }
     default:
       if (sub) {
         console.error(`Error: Unknown data command: ${sub}\n`);
@@ -126,6 +150,8 @@ export async function dataCommand(
       console.log("  ingest-all         Load all data files into DuckDB");
       console.log("  preview <file>     Infer schema without loading");
       console.log("  generate [rows]    Generate synthetic e-commerce data");
+      console.log("  add <dataset>      Download a dataset from the marketplace");
+      console.log("  marketplace        Browse available datasets");
       console.log("  reset              Delete the DuckDB warehouse and start fresh");
       console.log("\nExamples:");
       console.log("  clawdata data list");

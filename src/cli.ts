@@ -25,6 +25,8 @@ import { logsCommand } from "./commands/logs.js";
 import { runInteractive, runNonInteractive } from "./tui/skills.js";
 import { skillCommand } from "./commands/skill.js";
 import { connectCommand } from "./commands/connect.js";
+import { updateCommand } from "./commands/update.js";
+import { serveCommand } from "./commands/serve.js";
 import * as path from "path";
 
 const VERSION = "1.0.0";
@@ -136,6 +138,12 @@ async function main(): Promise<void> {
       }
       return;
     }
+
+    case "update":
+      return updateCommand(sub, rest, VERSION);
+
+    case "serve":
+      return serveCommand(rest, dbManager);
 
     case "doctor":
       return doctorCommand(dataIngestor);
