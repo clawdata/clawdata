@@ -59,7 +59,7 @@ export class DatabaseManager {
   private connection: DuckDBConnection | null = null;
   private config: DatabaseConfig = {
     type: "duckdb",
-    path: process.env.DB_PATH || "./data/warehouse.duckdb",
+    path: process.env.DB_PATH || "./userdata/warehouse.duckdb",
   };
 
   async initialize(): Promise<void> {

@@ -25,8 +25,8 @@ export class DbtManager {
   private profilesDir: string;
 
   constructor() {
-    this.projectDir = path.resolve(process.env.DBT_PROJECT_DIR || "./apps/dbt");
-    this.profilesDir = path.resolve(process.env.DBT_PROFILES_DIR || "./apps/dbt");
+    this.projectDir = path.resolve(process.env.DBT_PROJECT_DIR || "./templates/dbt");
+    this.profilesDir = path.resolve(process.env.DBT_PROFILES_DIR || "./templates/dbt");
   }
 
   private async runCommand(command: string): Promise<DbtRunResult> {

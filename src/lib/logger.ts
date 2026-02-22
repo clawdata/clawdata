@@ -23,9 +23,9 @@ export class LogManager {
     const root = rootDir || process.env.CLAWDATA_ROOT || ".";
     // Register known log sources
     this.sources = [
-      { name: "dbt", path: path.join(root, "apps/dbt/logs/dbt.log") },
-      { name: "cli", path: path.join(root, ".clawdata/cli.log") },
-      { name: "airflow", path: path.join(root, "apps/airflow/logs/scheduler.log") },
+      { name: "dbt", path: path.join(root, "templates/dbt/logs/dbt.log") },
+      { name: "cli", path: path.join(root, "userdata/config/cli.log") },
+      { name: "airflow", path: path.join(root, "templates/airflow/logs/scheduler.log") },
     ];
   }
 

@@ -1,11 +1,10 @@
 #!/bin/bash
 set -euo pipefail
 
-# suppress Node.js experimental warnings
 export NODE_NO_WARNINGS=1
 
-echo "OpenClaw Data Skills — Setup"
-echo "============================="
+echo "ClawData — Setup"
+echo "================"
 echo ""
 
 # ── prerequisites ───────────────────────────────────────────────────
@@ -51,57 +50,23 @@ fi
 
 echo ""
 if [ -d "node_modules" ] && [ -f "build/cli.js" ]; then
-  echo "✓ Dependencies already installed, skipping"
+  echo "✓ Dependencies already installed"
 else
   echo "Installing dependencies …"
   npm install --silent 2>&1 | grep -v ExperimentalWarning || true
   echo "✓ Dependencies installed"
 fi
-npm link --silent 2>&1 | grep -v ExperimentalWarning || true
-echo "✓ clawdata CLI ready"
 
-# ── skill selection + doctor ────────────────────────────────────────
+# ── ensure userdata directory exists ────────────────────────────────
 
-echo ""
-if [ -t 0 ]; then
-  clawdata setup
-else
-  clawdata setup --yes
-fi
+mkdir -p userdata/config
 
 echo ""
-echo "You're all set! Here are some things to try:"
+echo "You're all set! Run 'clawdata mc' to launch Mission Control."
 echo ""
-
-# read saved skills config
-CONFIG=".clawdata/skills.json"
-skills=""
-if [ -f "$CONFIG" ]; then
-  skills=$(cat "$CONFIG")
-fi
-
-has_skill() { echo "$skills" | grep -q "\"$1\""; }
-
-if has_skill duckdb; then
-  echo "  clawdata data ingest-all     Load CSV files into DuckDB"
-  echo '  clawdata db query "SELECT * FROM raw_customers LIMIT 5"'
-  echo ""
-fi
-
-if has_skill dbt; then
-  echo "  clawdata dbt run             Run dbt transformations"
-  echo "  clawdata dbt test            Validate data with dbt tests"
-  echo ""
-fi
-
-if has_skill airflow; then
-  echo "  clawdata status              Check running tasks"
-  echo ""
-fi
-
-echo "  clawdata doctor              Check your setup"
-echo "  clawdata skills              Add or remove skills"
+echo "  clawdata mc               Launch Mission Control dashboard"
+echo "  clawdata setup            Configure skills interactively"
+echo "  clawdata doctor           Check your setup"
 echo ""
 echo "To use with OpenClaw:"
-echo "  openclaw tui                 Start chatting — your data skills are ready"
-echo "  openclaw                     List OpenClaw commands"
+echo "  openclaw tui              Start chatting — your data skills are ready"

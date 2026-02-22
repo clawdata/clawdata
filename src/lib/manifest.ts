@@ -21,7 +21,7 @@ export class IngestManifest {
   private manifestPath: string;
 
   constructor(rootDir: string) {
-    this.manifestPath = path.join(rootDir, ".clawdata", "ingest-manifest.json");
+    this.manifestPath = path.join(rootDir, "userdata", "config", "ingest-manifest.json");
   }
 
   /** Load manifest from disk. */

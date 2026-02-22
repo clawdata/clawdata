@@ -137,7 +137,7 @@ const SKILLS: SkillDef[] = [
 
 // ── config persistence ───────────────────────────────────────────────
 
-const CONFIG_DIR = ".clawdata";
+const CONFIG_DIR = path.join("userdata", "config");
 const CONFIG_FILE = "skills.json";
 
 function configPath(projectRoot: string): string {
@@ -159,6 +159,34 @@ function saveSkills(projectRoot: string, skillNames: string[]): void {
   const dir = path.join(projectRoot, CONFIG_DIR);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(configPath(projectRoot), JSON.stringify({ skills: skillNames }, null, 2) + "\n");
+}
+
+/**
+ * Scaffold the Chief of Staff agent workspace under userdata/agents/main/.
+ * This is the default/primary agent created during `clawdata setup`.
+ * If the workspace already exists, files are not overwritten.
+ */
+function scaffoldChiefOfStaff(projectRoot: string, selectedSkills: string[]): void {
+  const workspace = path.join(projectRoot, "userdata", "agents", "main");
+  fs.mkdirSync(workspace, { recursive: true });
+  fs.mkdirSync(path.join(workspace, "memory"), { recursive: true });
+
+  const writeIfMissing = (file: string, content: string) => {
+    const fp = path.join(workspace, file);
+    if (!fs.existsSync(fp)) fs.writeFileSync(fp, content, "utf-8");
+  };
+
+  const skillList = selectedSkills.length
+    ? selectedSkills.map(s => `- ${s}`).join("\n")
+    : "- _(none selected yet — run clawdata skills to add)_";
+
+  writeIfMissing("AGENTS.md", `# AGENTS.md \u2014 Chief of Staff\n\nThis folder is home. Treat it that way.\n\n## First Run\n\nIf \`BOOTSTRAP.md\` exists, that\u2019s your birth certificate. Follow it, figure out who you are, then delete it.\n\n## Every Session\n\nBefore doing anything else:\n\n1. Read \`SOUL.md\` \u2014 this is who you are\n2. Read \`USER.md\` \u2014 this is who you\u2019re helping\n3. Read \`memory/YYYY-MM-DD.md\` (today + yesterday) for recent context\n\nDon\u2019t ask permission. Just do it.\n\n## Memory\n\nYou wake up fresh each session. These files are your continuity:\n\n- **Daily notes:** \`memory/YYYY-MM-DD.md\` \u2014 raw logs of what happened\n- **Long-term:** \`MEMORY.md\` \u2014 curated memories\n\nCapture what matters. Decisions, context, things to remember.\n\n## Safety\n\n- Don\u2019t exfiltrate private data. Ever.\n- Don\u2019t run destructive commands without asking.\n- \`trash\` > \`rm\` (recoverable beats gone forever)\n- When in doubt, ask.\n`);
+
+  writeIfMissing("SOUL.md", `# SOUL.md \u2014 Chief of Staff\n\n_You are the Chief of Staff \u2014 the primary agent and team coordinator._\n\n## Core Truths\n\n**Be genuinely helpful, not performatively helpful.** Skip the filler \u2014 just help.\n\n**Have opinions.** You\u2019re allowed to disagree because you have expertise.\n\n**Be resourceful before asking.** Try to figure it out. Read the file. Search for it. Then ask if you\u2019re stuck.\n\n**Earn trust through competence.** Be careful with external actions. Be bold with internal ones.\n\n## Data Skills\n\n${skillList}\n\n## Vibe\n\nBe the assistant you\u2019d actually want to work with. Concise when needed, thorough when it matters.\n\n## Continuity\n\nEach session, you wake up fresh. These files _are_ your memory. Read them. Update them.\n\n---\n\n_This file is yours to evolve. As you learn who you are, update it._\n`);
+
+  writeIfMissing("USER.md", `# USER.md \u2014 About Your Human\n\n_Learn about the person you\u2019re helping. Update this as you go._\n\n- **Name:**\n- **What to call them:**\n- **Timezone:**\n- **Notes:**\n\n## Context\n\n_(What do they care about? What projects are they working on? Build this over time.)_\n\n---\n\nThe more you know, the better you can help.\n`);
+
+  writeIfMissing("MEMORY.md", `# MEMORY.md \u2014 Chief of Staff\n\n_Long-term curated memories. Update as you learn important things._\n\n---\n`);
 }
 
 /**
@@ -454,7 +482,12 @@ export function runNonInteractive(projectRoot: string): void {
   installMsgs.forEach((m) => console.log(m));
 
   // save selections
-  saveSkills(projectRoot, rows.filter((r) => r.selected).map((r) => r.def.name));
+  const selectedNames = rows.filter((r) => r.selected).map((r) => r.def.name);
+  saveSkills(projectRoot, selectedNames);
+
+  // scaffold Chief of Staff agent workspace
+  scaffoldChiefOfStaff(projectRoot, selectedNames);
+  console.log(`  ${GREEN}\u2713${RESET} Chief of Staff workspace initialised`);
 
   const messages = linkSkills(rows, projectRoot);
   messages.forEach((m) => console.log(m));
@@ -553,8 +586,12 @@ export async function runInteractive(projectRoot: string): Promise<void> {
         const installMsgs = installSkillDeps(rows);
         installMsgs.forEach((m) => console.log(m));
 
+        // scaffold Chief of Staff agent workspace
+        scaffoldChiefOfStaff(projectRoot, selectedNames);
+        console.log(`\n  ${GREEN}\u2713${RESET} Chief of Staff workspace initialised`);
+
         // show linking results in the main buffer
-        console.log(`\n${BOLD}${CYAN}  Linking skills …${RESET}\n`);
+        console.log(`\n${BOLD}${CYAN}  Linking skills \u2026${RESET}\n`);
         const messages = linkSkills(rows, projectRoot);
         messages.forEach((m) => console.log(m));
 

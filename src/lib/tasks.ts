@@ -31,10 +31,10 @@ export class TaskTracker {
 
   /**
    * Enable disk persistence.  Pass a directory (e.g. project root) and tasks
-   * will be saved to `<dir>/.clawdata/tasks.json`.
+   * will be saved to `<dir>/userdata/config/tasks.json`.
    */
   enablePersistence(rootDir: string): void {
-    this.persistPath = path.join(rootDir, ".clawdata", "tasks.json");
+    this.persistPath = path.join(rootDir, "userdata", "config", "tasks.json");
   }
 
   /** Load tasks from disk (if persistence is enabled and file exists). */

@@ -3,19 +3,19 @@ build/
 *.log
 .env
 .DS_Store
-.clawdata/
 dbt_modules/
 target/
 logs/
-*.duckdb
-*.duckdb.wal
-data/*
-!data/sample/
-apps/dbt/models/*
-!apps/dbt/models/sample/
+
+# User data (OpenClaw workspace, DuckDB, config, memory)
+userdata/
+
+# dbt models (keep sample only)
+templates/dbt/models/*
+!templates/dbt/models/sample/
 
 # Evidence
-apps/evidence/.evidence/
-apps/evidence/node_modules/
-apps/evidence/build/
-apps/evidence/package-lock.json
+templates/evidence/.evidence/
+templates/evidence/node_modules/
+templates/evidence/build/
+templates/evidence/package-lock.json
