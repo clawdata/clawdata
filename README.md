@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="media/octopus64.png" alt="ClawData" width="200" />
+  <img src="media/octopus64.png" alt="ClawData" width="100" />
 </p>
 
 <h1 align="center">ClawData</h1>
