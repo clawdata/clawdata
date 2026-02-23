@@ -2705,22 +2705,23 @@ textarea.task-form-input {
   border: 1.5px solid var(--border-light);
   border-radius: 10px;
   padding: 8px 12px;
-  max-width: 360px;
+  max-width: min(500px, 40vw);
   min-width: 100px;
   z-index: 20;
   box-shadow: var(--shadow-md);
   animation: office-bubble-in 0.3s ease-out;
   pointer-events: none;
+  width: max-content;
 }
 
 .office-speech-right {
-  left: 50%;
-  transform: translateX(-20%);
+  left: 0;
+  transform: translateX(0);
 }
 
 .office-speech-left {
-  right: 50%;
-  transform: translateX(20%);
+  right: 0;
+  transform: translateX(0);
 }
 
 .office-speech-text {
@@ -2764,27 +2765,16 @@ textarea.task-form-input {
 @keyframes office-bubble-in {
   0% {
     opacity: 0;
-    transform: translateX(-20%) translateY(6px) scale(0.9);
+    transform: translateY(6px) scale(0.9);
   }
   100% {
     opacity: 1;
-    transform: translateX(-20%) translateY(0) scale(1);
+    transform: translateY(0) scale(1);
   }
 }
 
 .office-speech-left.office-speech-bubble {
-  animation-name: office-bubble-in-left;
-}
-
-@keyframes office-bubble-in-left {
-  0% {
-    opacity: 0;
-    transform: translateX(20%) translateY(6px) scale(0.9);
-  }
-  100% {
-    opacity: 1;
-    transform: translateX(20%) translateY(0) scale(1);
-  }
+  animation-name: office-bubble-in;
 }
 
 /* clickable speech bubbles */

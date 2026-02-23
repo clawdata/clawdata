@@ -1812,7 +1812,9 @@ export class MissionControlServer {
         const dName = ci?.name || name;
         const prompt = [
           `A user in the office just said: "${message}"`,
-          `Respond naturally as ${dName}. Keep it brief (1-3 sentences). Be helpful and in-character.`,
+          `Respond as ${dName}. Actually perform the requested work — run queries, analyse data, produce results.`,
+          `Do NOT say you'll "get back to them" or "look into it later". Do the work NOW and share the findings.`,
+          `If the request involves data, run the queries and include the results in your response.`,
         ].join("\n");
 
         let replyText = "";

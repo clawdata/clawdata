@@ -744,6 +744,8 @@ async function triggerChat(): Promise<void> {
     const incoming: ChatMessage[] = data.messages || [];
 
     chatLoading = false;
+    _lastConvoMessages = incoming;
+    _convoFirstPass = true;
     animateBubbles(incoming, 0);
   } catch (err: any) {
     chatLoading = false;
@@ -757,23 +759,35 @@ function stopConversation(): void {
   if (chatAnimTimer) { clearTimeout(chatAnimTimer); chatAnimTimer = null; }
   conversing = false;
   seatBubbles = {};
+  _lastConvoMessages = [];
+  _convoFirstPass = true;
   renderOfficePage();
 }
 
 /** Show chat messages one at a time as speech bubbles on the floor plan. */
+let _lastConvoMessages: ChatMessage[] = [];
+let _convoFirstPass = true;
+
 function animateBubbles(messages: ChatMessage[], idx: number): void {
   if (idx >= messages.length) {
-    // Finished — keep last bubbles visible longer; they clear when agent speaks again or convo stops
+    // First pass done — keep last bubbles visible, then loop
+    _convoFirstPass = false;
     chatAnimTimer = setTimeout(() => {
       seatBubbles = {};
       updateFloorBubbles();
-      // Keep conversing true so user can see the full log
-    }, 20000);
+      // After a brief pause with no bubbles, cycle again
+      chatAnimTimer = setTimeout(() => {
+        if (conversing) animateBubbles(_lastConvoMessages, 0);
+      }, 3000);
+    }, 12000);
     return;
   }
 
   const msg = messages[idx];
-  chatMessages.push(msg);
+  // Only add to the chat log on the first pass
+  if (_convoFirstPass) {
+    chatMessages.push(msg);
+  }
 
   // Set this agent's floor bubble (only for seated agents, skip System)
   const ca = currentAssignments();
@@ -784,7 +798,7 @@ function animateBubbles(messages: ChatMessage[], idx: number): void {
 
   // Update just the floor bubbles + chat log without full re-render
   updateFloorBubbles();
-  updateChatLog();
+  if (_convoFirstPass) updateChatLog();
 
   // Schedule next message
   chatAnimTimer = setTimeout(() => animateBubbles(messages, idx + 1), 1800);
