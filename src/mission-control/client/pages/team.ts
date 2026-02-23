@@ -7,7 +7,8 @@
  */
 
 import { state } from "../state.js";
-import { escHtml, agentColor, initials, showConfirmDialog, showAlertDialog } from "../utils.js";
+import { escHtml, agentColor, initials } from "../utils.js";
+import { showConfirm as showConfirmDialog, showAlert as showAlertDialog } from "../modal.js";
 import { setPageContent, renderPage } from "../router.js";
 import { AGENT_ROLES } from "../roles.js";
 // Skills come from gateway via server — no localStorage needed
@@ -130,7 +131,7 @@ function renderTeamCard(agent: any, activeSkillNames: string[], isHero: boolean)
           <div class="team-card-role">${escHtml(isHero ? (agent.theme || "Chief of Staff") : (agent.theme || "Unassigned"))}</div>
         </div>
       </div>
-      <div class="team-card-desc">${escHtml(desc)}</div>
+      <div class="team-card-desc">${agent.currentTask ? `⚙️ Working on: ${escHtml(agent.currentTask)}` : escHtml(desc)}</div>
       ${skills.length ? `
       <div class="team-card-tags">
         ${skills.map(s => `<span class="team-tag ${activeSkillNames.includes(s) ? "team-tag--on" : ""}">${escHtml(s)}</span>`).join("")}

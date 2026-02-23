@@ -1,5 +1,9 @@
 "use strict";
 (() => {
+  var __defProp = Object.defineProperty;
+  var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
+  var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
+
   // src/mission-control/client/state.ts
   var state = {
     dashboard: null,
@@ -25,7 +29,8 @@
     memoryLoading: false,
     memorySelectedAgent: null,
     memorySelectedFile: null,
-    memoryFileContent: null
+    memoryFileContent: null,
+    hideDebug: true
   };
 
   // src/mission-control/client/utils.ts
@@ -91,67 +96,6 @@
     if (time) time.textContent = formatTime(now);
     if (date) date.textContent = formatDate(now);
   }
-  function showConfirmDialog(opts) {
-    return new Promise((resolve) => {
-      const overlay = document.createElement("div");
-      overlay.className = "confirm-overlay";
-      overlay.innerHTML = `
-      <div class="confirm-dialog">
-        <div class="confirm-icon">${opts.destructive ? "\u26A0" : "\u2139"}</div>
-        <div class="confirm-title">${escHtml(opts.title || "Confirm")}</div>
-        <div class="confirm-message">${escHtml(opts.message || "Are you sure?")}</div>
-        <div class="confirm-actions">
-          <button class="btn confirm-cancel">${escHtml(opts.cancelLabel || "Cancel")}</button>
-          <button class="btn ${opts.destructive ? "confirm-destructive" : "btn-approve"} confirm-ok">${escHtml(opts.confirmLabel || "Confirm")}</button>
-        </div>
-      </div>
-    `;
-      document.body.appendChild(overlay);
-      requestAnimationFrame(() => overlay.classList.add("open"));
-      const close = (result) => {
-        overlay.classList.remove("open");
-        setTimeout(() => overlay.remove(), 150);
-        resolve(result);
-      };
-      overlay.querySelector(".confirm-cancel").addEventListener("click", () => close(false));
-      overlay.querySelector(".confirm-ok").addEventListener("click", () => close(true));
-      overlay.addEventListener("click", (e) => {
-        if (e.target === overlay) close(false);
-      });
-      setTimeout(() => overlay.querySelector(".confirm-cancel")?.focus(), 50);
-    });
-  }
-  function showAlertDialog(opts) {
-    const o = typeof opts === "string" ? { message: opts } : opts;
-    const variant = o.variant || "info";
-    const icon = variant === "error" ? "\u274C" : variant === "warning" ? "\u26A0" : "\u2139\uFE0F";
-    return new Promise((resolve) => {
-      const overlay = document.createElement("div");
-      overlay.className = "confirm-overlay";
-      overlay.innerHTML = `
-      <div class="confirm-dialog">
-        <div class="confirm-icon">${icon}</div>
-        <div class="confirm-title">${escHtml(o.title || (variant === "error" ? "Error" : "Notice"))}</div>
-        <div class="confirm-message">${escHtml(o.message)}</div>
-        <div class="confirm-actions">
-          <button class="btn btn-approve confirm-ok">${escHtml(o.buttonLabel || "OK")}</button>
-        </div>
-      </div>
-    `;
-      document.body.appendChild(overlay);
-      requestAnimationFrame(() => overlay.classList.add("open"));
-      const close = () => {
-        overlay.classList.remove("open");
-        setTimeout(() => overlay.remove(), 150);
-        resolve();
-      };
-      overlay.querySelector(".confirm-ok").addEventListener("click", close);
-      overlay.addEventListener("click", (e) => {
-        if (e.target === overlay) close();
-      });
-      setTimeout(() => overlay.querySelector(".confirm-ok")?.focus(), 50);
-    });
-  }
 
   // src/mission-control/client/skills-store.ts
   var _agentSkills = {};
@@ -170,7 +114,7 @@
     const agents = $("statAgentsActive");
     const queue = $("statTasksQueue");
     if (agents) agents.textContent = String(d?.agents?.active || state.agents.filter((a) => a.status === "working").length);
-    if (queue) queue.textContent = String(d?.queue?.total || state.queue.length);
+    if (queue) queue.textContent = String((d?.queue?.total || state.queue.length) - (d?.queue?.done || 0));
     const badge = $("projectBadge");
     if (d?.project && badge) badge.textContent = d.project.toUpperCase();
     const el = $("gatewayStatus");
@@ -349,11 +293,27 @@
       state.dashboard = data;
       state.agents = data.agents?.list || [];
       state.queue = data.queue?.items || [];
-      state.feed = data.feed || [];
       state.gateway = data.gateway || "disconnected";
       state.gatewayHealth = data.gatewayHealth || null;
       state.presence = data.presence || [];
       state.usageCost = data.usageCost || [];
+      const serverFeed = data.feed || [];
+      if (state.feed.length === 0) {
+        state.feed = serverFeed;
+      } else {
+        const existingIds = new Set(state.feed.map((e) => e.id || `${e.timestamp}|${e.title}`));
+        for (const ev of serverFeed) {
+          const key = ev.id || `${ev.timestamp}|${ev.title}`;
+          if (!existingIds.has(key)) {
+            state.feed.push(ev);
+            existingIds.add(key);
+          }
+        }
+        state.feed.sort(
+          (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+        );
+        if (state.feed.length > 200) state.feed.length = 200;
+      }
       const stableJson = JSON.stringify(data, (key, value) => {
         if (key === "lastSeen" || key === "tokenUsage" || key === "percentUsed" || key === "contextTokens") return void 0;
         return value;
@@ -572,16 +532,217 @@
     await fetchDashboard();
     return data;
   }
+  async function dispatchQueueItem(id) {
+    const res = await fetch(`${API}/api/queue/dispatch`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Failed to dispatch task");
+    await fetchDashboard();
+    return data;
+  }
+  async function completeQueueItem(id, actor, summary) {
+    const res = await fetch(`${API}/api/queue/complete`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, actor, summary })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Failed to complete task");
+    await fetchDashboard();
+    return data;
+  }
+  async function assignAndDispatchQueueItem(id, assignee) {
+    const res = await fetch(`${API}/api/queue/assign`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, assignee, autoDispatch: true })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Failed to assign and dispatch task");
+    await fetchDashboard();
+    return data;
+  }
+  async function clearQueueItemActivity(id) {
+    const res = await fetch(`${API}/api/queue/clear-activity`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Failed to clear activity");
+    await fetchDashboard();
+    return data;
+  }
+  async function clearAllQueueItems() {
+    const res = await fetch(`${API}/api/queue/clear-all`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({})
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Failed to clear all tasks");
+    await fetchDashboard();
+    return data;
+  }
+
+  // src/mission-control/client/modal.ts
+  var _stack = [];
+  function _globalKeyHandler(e) {
+    if (e.key === "Escape" && _stack.length) {
+      e.preventDefault();
+      e.stopPropagation();
+      _stack[_stack.length - 1].close();
+    }
+  }
+  var _keyBound = false;
+  function _ensureKeyBinding() {
+    if (_keyBound) return;
+    document.addEventListener("keydown", _globalKeyHandler, true);
+    _keyBound = true;
+  }
+  function _maybeUnbindKey() {
+    if (_stack.length === 0 && _keyBound) {
+      document.removeEventListener("keydown", _globalKeyHandler, true);
+      _keyBound = false;
+    }
+  }
+  var ModalInstance = class {
+    constructor(opts = {}) {
+      __publicField(this, "overlay");
+      __publicField(this, "body");
+      __publicField(this, "_closed", false);
+      __publicField(this, "_onClose", []);
+      const overlay = document.createElement("div");
+      overlay.className = "confirm-overlay";
+      overlay.style.pointerEvents = "none";
+      const dialog = document.createElement("div");
+      dialog.className = "confirm-dialog";
+      dialog.style.maxWidth = opts.maxWidth || "460px";
+      dialog.style.textAlign = "left";
+      overlay.appendChild(dialog);
+      this.overlay = overlay;
+      this.body = dialog;
+      let downOnBackdrop = false;
+      overlay.addEventListener("pointerdown", (e) => {
+        downOnBackdrop = e.target === overlay;
+      }, true);
+      overlay.addEventListener("pointerup", (e) => {
+        if (downOnBackdrop && e.target === overlay && !opts.persistent) {
+          this.close();
+        }
+        downOnBackdrop = false;
+      }, true);
+      dialog.addEventListener("pointerdown", (e) => e.stopPropagation());
+      dialog.addEventListener("pointerup", (e) => e.stopPropagation());
+      dialog.addEventListener("click", (e) => e.stopPropagation());
+      document.body.appendChild(overlay);
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          overlay.classList.add("open");
+          overlay.style.pointerEvents = "";
+        });
+      });
+      _ensureKeyBinding();
+      _stack.push(this);
+    }
+    /** Register a callback to fire when the modal is closed. */
+    onClose(fn) {
+      this._onClose.push(fn);
+    }
+    close() {
+      if (this._closed) return;
+      this._closed = true;
+      const idx = _stack.indexOf(this);
+      if (idx !== -1) _stack.splice(idx, 1);
+      _maybeUnbindKey();
+      this.overlay.classList.remove("open");
+      this.overlay.style.pointerEvents = "none";
+      setTimeout(() => this.overlay.remove(), 180);
+      for (const fn of this._onClose) {
+        try {
+          fn();
+        } catch (e) {
+          console.error("Modal onClose error:", e);
+        }
+      }
+    }
+    get isClosed() {
+      return this._closed;
+    }
+  };
+  function openModal(opts) {
+    return new ModalInstance(opts);
+  }
+  function showConfirm(opts) {
+    return new Promise((resolve) => {
+      const m = openModal({ maxWidth: "380px" });
+      m.body.style.textAlign = "center";
+      m.body.innerHTML = `
+      <div class="confirm-icon">${opts.destructive ? "\u26A0" : "\u2139"}</div>
+      <div class="confirm-title">${esc(opts.title || "Confirm")}</div>
+      <div class="confirm-message">${esc(opts.message || "Are you sure?")}</div>
+      <div class="confirm-actions">
+        <button class="btn confirm-cancel">${esc(opts.cancelLabel || "Cancel")}</button>
+        <button class="btn ${opts.destructive ? "confirm-destructive" : "btn-approve"} confirm-ok">${esc(opts.confirmLabel || "Confirm")}</button>
+      </div>
+    `;
+      const done = (val) => {
+        resolve(val);
+        m.close();
+      };
+      m.onClose(() => resolve(false));
+      m.body.querySelector(".confirm-cancel").addEventListener("click", () => done(false));
+      m.body.querySelector(".confirm-ok").addEventListener("click", () => done(true));
+      setTimeout(() => m.body.querySelector(".confirm-cancel")?.focus(), 60);
+    });
+  }
+  function showAlert(opts) {
+    const o = typeof opts === "string" ? { message: opts } : opts;
+    const variant = o.variant || "info";
+    const icon = variant === "error" ? "\u274C" : variant === "warning" ? "\u26A0" : "\u2139\uFE0F";
+    return new Promise((resolve) => {
+      const m = openModal({ maxWidth: "380px" });
+      m.body.style.textAlign = "center";
+      m.body.innerHTML = `
+      <div class="confirm-icon">${icon}</div>
+      <div class="confirm-title">${esc(o.title || (variant === "error" ? "Error" : "Notice"))}</div>
+      <div class="confirm-message">${esc(o.message)}</div>
+      <div class="confirm-actions">
+        <button class="btn btn-approve confirm-ok">${esc(o.buttonLabel || "OK")}</button>
+      </div>
+    `;
+      m.onClose(() => resolve());
+      m.body.querySelector(".confirm-ok").addEventListener("click", () => {
+        resolve();
+        m.close();
+      });
+      setTimeout(() => m.body.querySelector(".confirm-ok")?.focus(), 60);
+    });
+  }
+  function esc(s) {
+    if (!s) return "";
+    const d = document.createElement("div");
+    d.textContent = s;
+    return d.innerHTML;
+  }
 
   // src/mission-control/client/pages/feed.ts
   function renderFeedPage() {
+    const filteredCount = getFilteredFeed().length;
     setPageContent(`
     <div class="page">
-      <div class="page-header">
+      <div class="page-header" style="display:flex;align-items:center;justify-content:space-between">
         <div>
           <div class="page-title">Live Feed</div>
-          <div class="page-subtitle">${state.feed.length} events</div>
+          <div class="page-subtitle">${filteredCount} events</div>
         </div>
+        <label class="debug-toggle" style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:var(--text-secondary);user-select:none">
+          <input type="checkbox" id="debugToggle" ${state.hideDebug ? "" : "checked"} style="cursor:pointer" />
+          Show debug
+        </label>
       </div>
 
       <div class="feed-tabs" id="feedTabs">
@@ -606,11 +767,31 @@
         tab.classList.add("active");
         const container = $("feedListContainer");
         if (container) container.innerHTML = renderFeedItems(getFilteredFeed());
+        bindFeedClicks();
       });
+      $("debugToggle")?.addEventListener("change", () => {
+        state.hideDebug = !$("debugToggle").checked;
+        const container = $("feedListContainer");
+        if (container) container.innerHTML = renderFeedItems(getFilteredFeed());
+        bindFeedClicks();
+      });
+      bindFeedClicks();
     });
   }
   function getFilteredFeed() {
-    return state.activeFeedTab === "all" ? state.feed.slice(0, 100) : state.feed.filter((f) => f.type === state.activeFeedTab).slice(0, 100);
+    let items = state.feed;
+    if (state.hideDebug) {
+      items = items.filter((f) => {
+        const ev = f;
+        if (ev._isLog && ev._logLevel === "debug") return false;
+        if (ev.detail && typeof ev.detail === "string" && ev.detail.endsWith("\xB7 debug")) return false;
+        return true;
+      });
+    }
+    if (state.activeFeedTab !== "all") {
+      items = items.filter((f) => f.type === state.activeFeedTab);
+    }
+    return items.slice(0, 100);
   }
   var iconMap = {
     system: "\u2699",
@@ -620,28 +801,123 @@
     error: "\u26A0",
     pipeline: "\u{1F504}"
   };
+  function cleanResponseText(text) {
+    return text.replace(/\bq_\d+_\w+\b/gi, "").replace(/^Task\s+complete\s*:\s*/i, "").replace(/^Task\s+\S*\s*complete\s*:\s*/i, "").replace(/\s{2,}/g, " ").trim();
+  }
   function renderFeedItems(items) {
     if (!items.length) {
       return '<div class="empty-state"><div class="empty-state-icon">\u{1F4E1}</div><div class="empty-state-text">Waiting for events...</div></div>';
     }
-    return items.map((ev, i) => `
-    <div class="feed-item ${i === 0 ? "new" : ""}">
-      <div class="feed-icon ${ev.type || "system"}">${iconMap[ev.type] || "\u2022"}</div>
+    return items.map((ev, i) => {
+      const bodyPreview = ev.body ? cleanResponseText(ev.body).slice(0, 140) : "";
+      return `
+    <div class="feed-item ${i === 0 ? "new" : ""}" data-feed-idx="${i}" style="cursor:pointer">
+      <div class="feed-icon ${ev.type || "system"}">${ev.icon ? escHtml(ev.icon) : iconMap[ev.type] || "\u2022"}</div>
       <div class="feed-content">
         <div class="feed-title">${escHtml(ev.title)}</div>
         <div class="feed-detail">${escHtml(ev.detail || "")}</div>
+        ${bodyPreview ? `<div class="feed-body-preview">${escHtml(bodyPreview)}${ev.body.length > 140 ? "\u2026" : ""}</div>` : ""}
       </div>
       <div class="feed-time">${timeAgo(ev.timestamp)}</div>
+    </div>`;
+    }).join("");
+  }
+  var _lastFilteredFeed = [];
+  function bindFeedClicks() {
+    _lastFilteredFeed = getFilteredFeed();
+    const container = $("feedListContainer");
+    if (!container) return;
+    container.addEventListener("click", onFeedItemClick);
+  }
+  function onFeedItemClick(e) {
+    const row = e.target.closest(".feed-item[data-feed-idx]");
+    if (!row) return;
+    const idx = parseInt(row.dataset.feedIdx || "", 10);
+    if (isNaN(idx) || idx < 0 || idx >= _lastFilteredFeed.length) return;
+    showFeedDetailModal(_lastFilteredFeed[idx]);
+  }
+  var typeLabels = {
+    system: "System",
+    agent: "Agent",
+    task: "Task",
+    pipeline: "Pipeline",
+    error: "Error",
+    plan: "Plan"
+  };
+  var typeBadgeColors = {
+    system: "var(--accent-cyan)",
+    agent: "var(--accent-green)",
+    task: "var(--accent-blue)",
+    pipeline: "var(--accent-purple)",
+    error: "var(--accent-red)",
+    plan: "var(--accent-yellow)"
+  };
+  function showFeedDetailModal(ev) {
+    const m = openModal({ maxWidth: "520px" });
+    const type = ev.type || "system";
+    const icon = ev.icon || iconMap[type] || "\u2022";
+    const label = typeLabels[type] || type;
+    const color = typeBadgeColors[type] || "var(--text-secondary)";
+    const actor = ev.actor || "";
+    const ts = ev.timestamp ? new Date(ev.timestamp) : null;
+    const timeStr = ts ? ts.toLocaleString("en-AU", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }) : "";
+    const relTime2 = ev.timestamp ? timeAgo(ev.timestamp) : "";
+    const isLog = ev._isLog;
+    const logLevel = ev._logLevel || "";
+    const subsystem = ev.detail?.match(/^([\w/:-]+)\s*·/)?.[1] || "";
+    const bodyText = ev.body ? cleanResponseText(ev.body) : "";
+    m.body.innerHTML = `
+    <div class="feed-detail-modal">
+      <div class="feed-detail-header">
+        <div class="feed-detail-icon ${type}" style="font-size:20px;width:40px;height:40px">${escHtml(icon)}</div>
+        <div style="flex:1;min-width:0">
+          <div class="feed-detail-title">${escHtml(ev.title)}</div>
+          <div style="display:flex;gap:8px;align-items:center;margin-top:4px;flex-wrap:wrap">
+            <span class="feed-detail-badge" style="--badge-color:${color}">${escHtml(label)}</span>
+            ${actor ? `<span class="feed-detail-badge" style="--badge-color:var(--text-secondary)">${escHtml(actor)}</span>` : ""}
+            ${isLog && logLevel ? `<span class="feed-detail-badge" style="--badge-color:${logLevel === "error" ? "var(--accent-red)" : logLevel === "warn" ? "var(--accent-yellow)" : "var(--text-muted)"}">${escHtml(logLevel)}</span>` : ""}
+          </div>
+        </div>
+      </div>
+
+      ${bodyText ? `
+      <div class="feed-detail-section">
+        <div class="feed-detail-label">RESPONSE</div>
+        <div class="feed-detail-value feed-detail-body">${escHtml(bodyText)}</div>
+      </div>` : ""}
+
+      ${ev.detail ? `
+      <div class="feed-detail-section">
+        <div class="feed-detail-label">DETAIL</div>
+        <div class="feed-detail-value">${escHtml(ev.detail)}</div>
+      </div>` : ""}
+
+      ${subsystem ? `
+      <div class="feed-detail-section">
+        <div class="feed-detail-label">SUBSYSTEM</div>
+        <div class="feed-detail-value" style="font-family:var(--font-mono);font-size:11px">${escHtml(subsystem)}</div>
+      </div>` : ""}
+
+      <div class="feed-detail-section">
+        <div class="feed-detail-label">TIMESTAMP</div>
+        <div class="feed-detail-value">${escHtml(timeStr)}${relTime2 ? ` <span style="color:var(--text-muted);margin-left:8px">(${escHtml(relTime2)})</span>` : ""}</div>
+      </div>
+
+      <div style="text-align:right;margin-top:20px">
+        <button class="btn feed-detail-close" style="min-width:80px">Close</button>
+      </div>
     </div>
-  `).join("");
+  `;
+    m.body.querySelector(".feed-detail-close")?.addEventListener("click", () => m.close());
   }
   function renderLogIntoFeed(container, entry) {
-    if (state.activeFeedTab !== "all") return;
     const levelClass = entry.level === "error" || entry.level === "warn" ? "error" : "";
+    const isDebug = entry.level === "debug";
+    if (isDebug && state.hideDebug) return;
     const time = entry.time ? new Date(entry.time).toLocaleTimeString("en-US", { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" }) : "";
     const subsystem = entry.subsystem ? `[${entry.subsystem}]` : "";
     const div = document.createElement("div");
-    div.className = `feed-item log-item ${levelClass}`;
+    div.className = `feed-item log-item ${levelClass}${isDebug ? " debug-item" : ""}`;
     div.innerHTML = `
     <div class="feed-icon ${levelClass ? "error" : "system"}">${entry.level === "error" || entry.level === "warn" ? "\u26A0" : "\u203A"}</div>
     <div class="feed-content">
@@ -655,6 +931,7 @@
     while (container.children.length > 200) container.removeChild(container.lastChild);
   }
   function appendFeedItemToDOM(container, ev, prepend) {
+    const bodyPreview = ev.body ? cleanResponseText(ev.body).slice(0, 140) : "";
     const div = document.createElement("div");
     div.className = "feed-item new";
     div.innerHTML = `
@@ -662,6 +939,7 @@
     <div class="feed-content">
       <div class="feed-title">${escHtml(ev.title)}</div>
       <div class="feed-detail">${escHtml(ev.detail || "")}</div>
+      ${bodyPreview ? `<div class="feed-body-preview">${escHtml(bodyPreview)}${ev.body.length > 140 ? "\u2026" : ""}</div>` : ""}
     </div>
     <div class="feed-time">${timeAgo(ev.timestamp)}</div>
   `;
@@ -671,6 +949,16 @@
   }
 
   // src/mission-control/client/sse.ts
+  var _softRefreshInFlight = false;
+  async function softRefresh() {
+    if (_softRefreshInFlight) return;
+    _softRefreshInFlight = true;
+    try {
+      await fetchDashboard();
+    } finally {
+      _softRefreshInFlight = false;
+    }
+  }
   function connectSSE() {
     const evtSource = new EventSource(`${API}/api/events`);
     evtSource.addEventListener("connected", () => console.log("SSE connected"));
@@ -681,30 +969,55 @@
         if (state.feed.length > 200) state.feed.length = 200;
         renderSidebarBadges();
         if (state.currentPage === "feed") {
-          const container = document.getElementById("feedListContainer");
-          if (container) appendFeedItemToDOM(container, event, true);
+          const tab = state.activeFeedTab;
+          if (tab === "all" || event.type === tab) {
+            const container = document.getElementById("feedListContainer");
+            if (container) {
+              const empty = container.querySelector(".empty-state");
+              if (empty) empty.remove();
+              appendFeedItemToDOM(container, event, true);
+            }
+          }
         }
       } catch {
       }
     });
-    evtSource.addEventListener("gateway:log", (e) => {
+    evtSource.addEventListener("log:entry", (e) => {
       try {
         const entry = JSON.parse(e.data);
-        if (state.currentPage === "feed" && state.activeFeedTab === "all") {
-          const container = document.getElementById("feedListContainer");
-          if (container) renderLogIntoFeed(container, entry);
+        const subsystem = entry.subsystem || "";
+        const isAgent = subsystem.startsWith("agent");
+        const isDebug = entry.level === "debug";
+        const syntheticEvent = {
+          id: `log-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          type: isAgent ? "agent" : entry.level === "error" || entry.level === "fatal" ? "error" : "system",
+          title: (entry.message || "").slice(0, 200),
+          detail: `${subsystem ? `[${subsystem}]` : ""} \xB7 ${entry.level || ""}`,
+          timestamp: entry.time || (/* @__PURE__ */ new Date()).toISOString(),
+          actor: subsystem || "system",
+          _isLog: true,
+          _logLevel: entry.level
+        };
+        state.feed.unshift(syntheticEvent);
+        if (state.feed.length > 200) state.feed.length = 200;
+        if (isDebug && state.hideDebug) return;
+        if (state.currentPage === "feed") {
+          const tab = state.activeFeedTab;
+          const showOnTab = tab === "all" || tab === "agent" && isAgent || tab === "error" && (entry.level === "error" || entry.level === "fatal") || tab === "system" && !isAgent;
+          if (showOnTab) {
+            const container = document.getElementById("feedListContainer");
+            if (container) {
+              const empty = container.querySelector(".empty-state");
+              if (empty) empty.remove();
+              renderLogIntoFeed(container, entry);
+            }
+          }
         }
       } catch {
       }
     });
-    evtSource.addEventListener("state:refresh", async () => {
-      await fetchDashboard();
-      renderPage();
-    });
-    evtSource.addEventListener("agents:changed", async () => {
-      await fetchDashboard();
-      renderPage();
-    });
+    evtSource.addEventListener("state:refresh", () => softRefresh());
+    evtSource.addEventListener("agents:changed", () => softRefresh());
     evtSource.onerror = () => {
       evtSource.close();
       setTimeout(connectSSE, 5e3);
@@ -858,7 +1171,7 @@
           <div class="stat-card-delta positive">${activeCount} active</div>
         </div>
         <div class="stat-card">
-          <div class="stat-card-value">${d.queue?.total || 0}</div>
+          <div class="stat-card-value">${(d.queue?.total || 0) - (d.queue?.done || 0)}</div>
           <div class="stat-card-label">Queue Items</div>
           <div class="stat-card-delta">${d.queue?.inProgress || 0} in progress</div>
         </div>
@@ -931,7 +1244,7 @@
         </div>
         <div class="mini-agent-info">
           <div class="mini-agent-name">${escHtml(a.name)}</div>
-          <div class="mini-agent-meta">${escHtml(a.role || "Agent")} \xB7 ${a.model ? escHtml(a.model) : "\u2014"}</div>
+          <div class="mini-agent-meta">${a.currentTask ? `\u2699\uFE0F ${escHtml(a.currentTask)}` : `${escHtml(a.role || "Agent")} \xB7 ${a.model ? escHtml(a.model) : "\u2014"}`}</div>
         </div>
         ${pct ? `<div class="mini-agent-usage"><div class="mini-usage-bar"><div class="mini-usage-fill" style="width:${pct}%"></div></div><span class="mini-usage-pct">${pct}%</span></div>` : ""}
       </div>`;
@@ -951,6 +1264,42 @@
   }
 
   // src/mission-control/client/pages/tasks.ts
+  function relTime(iso) {
+    if (!iso) return "";
+    const diff = Date.now() - new Date(iso).getTime();
+    if (diff < 0 || diff < 6e4) return "just now";
+    if (diff < 36e5) return `${Math.floor(diff / 6e4)}m ago`;
+    if (diff < 864e5) return `${Math.floor(diff / 36e5)}h ago`;
+    return `${Math.floor(diff / 864e5)}d ago`;
+  }
+  var ACTIVITY_ICONS = {
+    created: "\u{1F4DD}",
+    assigned: "\u{1F464}",
+    reassigned: "\u{1F504}",
+    dispatched: "\u{1F680}",
+    started: "\u25B6\uFE0F",
+    review: "\u{1F440}",
+    completed: "\u2705",
+    dispatch_error: "\u26A0\uFE0F",
+    summary: "\u{1F4CB}",
+    working: "\u2699\uFE0F",
+    responded: "\u{1F4AC}"
+  };
+  function fmtTimestamp(iso) {
+    if (!iso) return "";
+    try {
+      const d = new Date(iso);
+      return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }) + " \xB7 " + d.toLocaleDateString([], { month: "short", day: "numeric" });
+    } catch {
+      return relTime(iso);
+    }
+  }
+  function agentOptions() {
+    return (state.agents || []).map((a) => ({
+      value: a.identName || a.name,
+      label: a.identName || a.name
+    }));
+  }
   function renderTasksPage() {
     const items = state.queue;
     const counts = { inbox: 0, assigned: 0, in_progress: 0, review: 0, done: 0 };
@@ -962,197 +1311,320 @@
       <div class="page-header" style="display:flex;align-items:center;justify-content:space-between">
         <div>
           <div class="page-title">Tasks & Missions</div>
-          <div class="page-subtitle">${items.length} items \xB7 ${counts.in_progress} in progress</div>
+          <div class="page-subtitle">${items.length} items \xB7 ${counts.in_progress} in progress \xB7 ${counts.done} done</div>
         </div>
-        <button class="btn btn-approve" id="addTaskBtn" style="font-size:12px;padding:8px 18px;display:flex;align-items:center;gap:6px">
-          <span style="font-size:15px;line-height:1">+</span> Add Task
-        </button>
+        <div style="display:flex;gap:8px;align-items:center">
+          ${items.length > 0 ? `<button class="btn btn-reject" id="clearAllBtn" style="font-size:11px;padding:6px 14px;opacity:0.7">Clear All</button>` : ""}
+          <button class="btn btn-approve" id="addTaskBtn" style="font-size:12px;padding:8px 18px;display:flex;align-items:center;gap:6px">
+            <span style="font-size:15px;line-height:1">+</span> Add Task
+          </button>
+        </div>
       </div>
 
       <div class="queue-columns">
-        ${renderQueueColumn("Inbox", "inbox", "dot-muted", items.filter((i) => i.status === "inbox"))}
-        ${renderQueueColumn("Assigned", "assigned", "dot-blue", items.filter((i) => i.status === "assigned"))}
-        ${renderQueueColumn("In Progress", "in_progress", "dot-cyan", items.filter((i) => i.status === "in_progress"))}
-        ${renderQueueColumn("Review", "review", "dot-yellow", items.filter((i) => i.status === "review"))}
-        ${renderQueueColumn("Done", "done", "dot-green", items.filter((i) => i.status === "done"))}
+        ${renderCol("Inbox", "inbox", "dot-muted", items.filter((i) => i.status === "inbox"))}
+        ${renderCol("Assigned", "assigned", "dot-blue", items.filter((i) => i.status === "assigned"))}
+        ${renderCol("In Progress", "in_progress", "dot-cyan", items.filter((i) => i.status === "in_progress"))}
+        ${renderCol("Review", "review", "dot-yellow", items.filter((i) => i.status === "review"))}
+        ${renderCol("Done", "done", "dot-green", items.filter((i) => i.status === "done"))}
       </div>
     </div>
-  `);
+  `, bindPageEvents);
+  }
+  function renderQueuePage() {
+    renderTasksPage();
+  }
+  function bindPageEvents() {
     document.getElementById("addTaskBtn")?.addEventListener("click", () => showAddTaskModal());
+    document.getElementById("clearAllBtn")?.addEventListener("click", () => showClearAllModal());
     document.querySelectorAll("[data-assign-id]").forEach((btn) => {
       btn.addEventListener("click", (e) => {
         e.stopPropagation();
-        const taskId = btn.dataset.assignId;
-        showAssignModal(taskId);
+        showAssignModal(btn.dataset.assignId);
+      });
+    });
+    document.querySelectorAll("[data-dispatch-id]").forEach((btn) => {
+      btn.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        btn.textContent = "Sending\u2026";
+        btn.classList.add("disabled");
+        try {
+          await dispatchQueueItem(btn.dataset.dispatchId);
+        } catch {
+          btn.textContent = "\u{1F680} Dispatch";
+          btn.classList.remove("disabled");
+        }
       });
     });
     document.querySelectorAll("[data-move-id]").forEach((btn) => {
       btn.addEventListener("click", async (e) => {
         e.stopPropagation();
-        const taskId = btn.dataset.moveId;
-        const newStatus = btn.dataset.moveStatus;
         try {
-          await updateQueueItem(taskId, { status: newStatus });
+          await updateQueueItem(btn.dataset.moveId, { status: btn.dataset.moveStatus });
         } catch (err) {
-          console.error("Failed to update task:", err);
+          console.error("Status update failed:", err);
         }
       });
     });
     document.querySelectorAll("[data-delete-id]").forEach((btn) => {
       btn.addEventListener("click", async (e) => {
         e.stopPropagation();
-        const taskId = btn.dataset.deleteId;
         try {
-          await deleteQueueItem(taskId);
+          await deleteQueueItem(btn.dataset.deleteId);
         } catch (err) {
-          console.error("Failed to delete task:", err);
+          console.error(err);
         }
       });
     });
+    document.querySelectorAll("[data-task-id]").forEach((card) => {
+      card.addEventListener("click", (e) => {
+        if (e.target.closest("button")) return;
+        showTaskDetailModal(card.dataset.taskId);
+      });
+    });
   }
-  function renderQueuePage() {
-    renderTasksPage();
-  }
-  function showAddTaskModal() {
-    const agents = state.agents || [];
-    const overlay = document.createElement("div");
-    overlay.className = "confirm-overlay";
-    overlay.innerHTML = `
-    <div class="confirm-dialog" style="max-width:460px;text-align:left">
-      <div class="confirm-title" style="margin-bottom:16px">New Task</div>
-      <div class="task-form">
-        <div class="task-form-group">
-          <label class="task-form-label">Title <span style="color:var(--accent-red)">*</span></label>
-          <input type="text" id="taskTitle" class="task-form-input" placeholder="What needs to be done?" autocomplete="off" />
-        </div>
-        <div class="task-form-group">
-          <label class="task-form-label">Description</label>
-          <textarea id="taskDesc" class="task-form-input" rows="3" placeholder="Optional details\u2026"></textarea>
-        </div>
-        <div style="display:flex;gap:12px">
-          <div class="task-form-group" style="flex:1">
-            <label class="task-form-label">Priority</label>
-            <select id="taskPriority" class="task-form-input">
-              <option value="low">Low</option>
-              <option value="medium" selected>Medium</option>
-              <option value="high">High</option>
-              <option value="critical">Critical</option>
-            </select>
-          </div>
-          <div class="task-form-group" style="flex:1">
-            <label class="task-form-label">Assign to Agent</label>
-            <select id="taskAssignee" class="task-form-input">
-              <option value="">Unassigned (Inbox)</option>
-              ${agents.map((a) => `<option value="${escHtml(a.identName || a.name)}">${escHtml(a.identName || a.name)}</option>`).join("")}
-            </select>
-          </div>
-        </div>
-        <div class="task-form-hint" id="assignHint" style="display:none">
-          Assigning to an agent will move this task to <strong>Assigned</strong> \u2014 actioned automatically.
-        </div>
-      </div>
-      <div class="confirm-actions" style="margin-top:20px;justify-content:flex-end">
-        <button class="btn confirm-cancel">Cancel</button>
-        <button class="btn btn-approve confirm-ok">Create Task</button>
-      </div>
+  function showClearAllModal() {
+    const count = state.queue.length;
+    const m = openModal({ maxWidth: "400px" });
+    m.body.innerHTML = `
+    <div class="confirm-title" style="margin-bottom:12px">Clear All Tasks</div>
+    <div class="confirm-message" style="text-align:left;margin-bottom:20px">
+      This will permanently delete <strong>${count} task(s)</strong> from the queue, including all activity history. This cannot be undone.
+    </div>
+    <div class="confirm-actions" style="justify-content:flex-end">
+      <button class="btn" id="modalCancel">Cancel</button>
+      <button class="btn btn-reject" id="modalOk">Delete All</button>
     </div>
   `;
-    document.body.appendChild(overlay);
-    requestAnimationFrame(() => overlay.classList.add("open"));
-    const titleInput = overlay.querySelector("#taskTitle");
-    const assigneeSelect = overlay.querySelector("#taskAssignee");
-    const hint = overlay.querySelector("#assignHint");
-    assigneeSelect.addEventListener("change", () => {
-      hint.style.display = assigneeSelect.value ? "block" : "none";
+    m.body.querySelector("#modalCancel").addEventListener("click", () => m.close());
+    m.body.querySelector("#modalOk").addEventListener("click", () => {
+      m.close();
+      clearAllQueueItems().catch((err) => console.error("Failed to clear all tasks:", err));
     });
-    const close = () => {
-      overlay.classList.remove("open");
-      setTimeout(() => overlay.remove(), 150);
-    };
-    overlay.querySelector(".confirm-cancel").addEventListener("click", close);
-    overlay.addEventListener("click", (e) => {
-      if (e.target === overlay) close();
-    });
-    overlay.querySelector(".confirm-ok").addEventListener("click", async () => {
+  }
+  function showAddTaskModal() {
+    const agents = agentOptions();
+    const m = openModal({ maxWidth: "460px" });
+    m.body.innerHTML = `
+    <div class="confirm-title" style="margin-bottom:16px">New Task</div>
+    <div class="task-form">
+      <div class="task-form-group">
+        <label class="task-form-label">Title <span style="color:var(--accent-red)">*</span></label>
+        <input type="text" id="taskTitle" class="task-form-input" placeholder="What needs to be done?" autocomplete="off" />
+      </div>
+      <div class="task-form-group">
+        <label class="task-form-label">Description</label>
+        <textarea id="taskDesc" class="task-form-input" rows="3" placeholder="Optional details\u2026"></textarea>
+      </div>
+      <div style="display:flex;gap:12px">
+        <div class="task-form-group" style="flex:1">
+          <label class="task-form-label">Priority</label>
+          <select id="taskPriority" class="task-form-input">
+            <option value="low">Low</option>
+            <option value="medium" selected>Medium</option>
+            <option value="high">High</option>
+            <option value="critical">Critical</option>
+          </select>
+        </div>
+        <div class="task-form-group" style="flex:1">
+          <label class="task-form-label">Assign to Agent</label>
+          <select id="taskAssignee" class="task-form-input">
+            <option value="">Auto (Chief of Staff)</option>
+            ${agents.map((a) => `<option value="${escHtml(a.value)}">${escHtml(a.label)}</option>`).join("")}
+          </select>
+        </div>
+      </div>
+      <div class="task-form-hint" style="margin-top:4px;font-size:11px;color:var(--text-muted)">
+        Tasks are automatically dispatched to the agent after creation.
+      </div>
+    </div>
+    <div class="confirm-actions" style="margin-top:20px;justify-content:flex-end">
+      <button class="btn" id="modalCancel">Cancel</button>
+      <button class="btn btn-approve" id="modalOk">Create Task</button>
+    </div>
+  `;
+    const titleInput = m.body.querySelector("#taskTitle");
+    m.body.querySelector("#modalCancel").addEventListener("click", () => m.close());
+    m.body.querySelector("#modalOk").addEventListener("click", () => {
       const title = titleInput.value.trim();
       if (!title) {
         titleInput.focus();
         return;
       }
-      const desc = overlay.querySelector("#taskDesc").value.trim();
-      const priority = overlay.querySelector("#taskPriority").value;
-      const assignee = assigneeSelect.value;
-      try {
-        await addQueueItem({ title, description: desc || void 0, priority, assignee: assignee || void 0 });
-        close();
-      } catch (err) {
-        console.error("Failed to create task:", err);
-      }
+      const desc = m.body.querySelector("#taskDesc").value.trim();
+      const priority = m.body.querySelector("#taskPriority").value;
+      const assignee = m.body.querySelector("#taskAssignee").value;
+      m.close();
+      addQueueItem({ title, description: desc || void 0, priority, assignee: assignee || void 0 }).catch((err) => console.error("Failed to create task:", err));
     });
-    setTimeout(() => titleInput.focus(), 50);
+    setTimeout(() => titleInput.focus(), 80);
   }
   function showAssignModal(taskId) {
-    const agents = state.agents || [];
     const item = state.queue.find((q) => q.id === taskId);
     if (!item) return;
-    const overlay = document.createElement("div");
-    overlay.className = "confirm-overlay";
-    overlay.innerHTML = `
-    <div class="confirm-dialog" style="max-width:380px;text-align:left">
-      <div class="confirm-title" style="margin-bottom:4px">Assign Task</div>
-      <div class="confirm-message" style="text-align:left;margin-bottom:16px">${escHtml(item.title)}</div>
-      <div class="task-form-group">
-        <label class="task-form-label">Assign to Agent</label>
-        <select id="assignAgent" class="task-form-input">
-          <option value="">Unassigned</option>
-          ${agents.map((a) => {
-      const name = a.identName || a.name;
-      const selected = item.assignee === name ? "selected" : "";
-      return `<option value="${escHtml(name)}" ${selected}>${escHtml(name)}</option>`;
+    const agents = agentOptions();
+    const m = openModal({ maxWidth: "380px" });
+    m.body.innerHTML = `
+    <div class="confirm-title" style="margin-bottom:4px">Assign Task</div>
+    <div class="confirm-message" style="text-align:left;margin-bottom:16px">${escHtml(item.title)}</div>
+    <div class="task-form-group">
+      <label class="task-form-label">Assign to Agent</label>
+      <select id="assignAgent" class="task-form-input">
+        <option value="">Unassigned</option>
+        ${agents.map((a) => {
+      const selected = item.assignee === a.value ? "selected" : "";
+      return `<option value="${escHtml(a.value)}" ${selected}>${escHtml(a.label)}</option>`;
     }).join("")}
-        </select>
-      </div>
-      <div class="task-form-hint" style="margin-top:8px">
-        Assigning to an agent automatically moves this task to <strong>Assigned</strong> status.
-      </div>
-      <div class="confirm-actions" style="margin-top:20px;justify-content:flex-end">
-        <button class="btn confirm-cancel">Cancel</button>
-        <button class="btn btn-approve confirm-ok">Assign</button>
-      </div>
+      </select>
+    </div>
+    <div class="task-form-group" style="margin-top:8px">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:var(--text-secondary)">
+        <input type="checkbox" id="assignAutoDispatch" checked />
+        Send to agent immediately (dispatch)
+      </label>
+    </div>
+    <div class="task-form-hint" style="margin-top:8px">
+      Dispatching sends the task to the agent's OpenClaw session so they start working on it.
+    </div>
+    <div class="confirm-actions" style="margin-top:20px;justify-content:flex-end">
+      <button class="btn" id="modalCancel">Cancel</button>
+      <button class="btn btn-approve" id="modalOk">Assign</button>
     </div>
   `;
-    document.body.appendChild(overlay);
-    requestAnimationFrame(() => overlay.classList.add("open"));
-    const close = () => {
-      overlay.classList.remove("open");
-      setTimeout(() => overlay.remove(), 150);
-    };
-    overlay.querySelector(".confirm-cancel").addEventListener("click", close);
-    overlay.addEventListener("click", (e) => {
-      if (e.target === overlay) close();
-    });
-    overlay.querySelector(".confirm-ok").addEventListener("click", async () => {
-      const agent = overlay.querySelector("#assignAgent").value;
+    m.body.querySelector("#modalCancel").addEventListener("click", () => m.close());
+    m.body.querySelector("#modalOk").addEventListener("click", () => {
+      const agent = m.body.querySelector("#assignAgent").value;
       if (!agent) {
-        close();
+        m.close();
         return;
       }
+      const autoDispatch = m.body.querySelector("#assignAutoDispatch").checked;
+      m.close();
+      const op = autoDispatch ? assignAndDispatchQueueItem(taskId, agent) : assignQueueItem(taskId, agent);
+      op.catch((err) => console.error("Assign failed:", err));
+    });
+  }
+  function showTaskDetailModal(taskId) {
+    const item = state.queue.find((q) => q.id === taskId);
+    if (!item) return;
+    const STATUS_LABEL = {
+      inbox: "Inbox",
+      assigned: "Assigned",
+      in_progress: "In Progress",
+      review: "Review",
+      done: "Done"
+    };
+    const activity = item.activity || [];
+    const m = openModal({ maxWidth: "560px" });
+    m.body.innerHTML = `
+    <div class="confirm-title" style="margin-bottom:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+      <span>${escHtml(item.title)}</span>
+      <span class="task-status-pill" style="font-size:10px">${STATUS_LABEL[item.status] || item.status}</span>
+      ${item.dispatchedAt ? `<span class="task-dispatched-tag" style="font-size:10px">\u{1F680} Dispatched</span>` : ""}
+    </div>
+    ${item.description ? `<div style="color:var(--text-secondary);font-size:13px;margin-bottom:16px;line-height:1.5">${escHtml(item.description)}</div>` : ""}
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+      <div>
+        <div class="task-form-label">Priority</div>
+        <div style="font-size:13px;text-transform:capitalize;margin-top:4px">${item.priority}</div>
+      </div>
+      <div>
+        <div class="task-form-label">Assignee</div>
+        <div style="font-size:13px;margin-top:4px">${item.assignee ? `<span style="display:inline-flex;align-items:center;gap:6px"><span class="mini-avatar" style="background:${agentColor(item.assignee)}15;color:${agentColor(item.assignee)};width:20px;height:20px;font-size:9px">${initials(item.assignee)}</span>${escHtml(item.assignee)}</span>` : "Unassigned"}</div>
+      </div>
+      <div>
+        <div class="task-form-label">Created</div>
+        <div style="font-size:13px;margin-top:4px">${relTime(item.createdAt)}</div>
+      </div>
+      ${item.dispatchedAt ? `<div><div class="task-form-label">Dispatched</div><div style="font-size:13px;margin-top:4px">${relTime(item.dispatchedAt)}</div></div>` : ""}
+      ${item.completedAt ? `<div><div class="task-form-label">Completed</div><div style="font-size:13px;margin-top:4px">${relTime(item.completedAt)}</div></div>` : ""}
+    </div>
+
+    ${activity.length ? `
+    <div style="margin-bottom:16px">
+      <div class="task-form-label" style="margin-bottom:8px">Activity Timeline (${activity.length})</div>
+      <div class="task-activity-list" style="max-height:320px;overflow-y:auto">
+        ${[...activity].reverse().map((a) => {
+      const hasLongDetail = a.detail && a.detail.length > 80;
+      const detailPreview = a.detail ? escHtml(a.detail.slice(0, 200)) : "";
+      const detailFull = a.detail ? escHtml(a.detail) : "";
+      const isAgent = a.actor !== "human" && a.actor !== "system";
+      const actorStyle = isAgent ? `color:var(--accent-primary)` : a.actor === "system" ? `color:var(--text-muted)` : ``;
+      return `
+          <div class="task-activity-item" style="align-items:flex-start">
+            <span class="task-activity-icon" style="margin-top:2px">${ACTIVITY_ICONS[a.action] || "\u2022"}</span>
+            <span class="task-activity-detail" style="flex:1;min-width:0">
+              <strong style="${actorStyle}">${escHtml(a.actor)}</strong> <span style="opacity:0.5">${escHtml(a.action)}</span>
+              ${a.detail ? `<div style="margin-top:3px;opacity:0.7;font-size:11px;line-height:1.4;word-break:break-word;white-space:pre-wrap">${hasLongDetail ? detailPreview + "\u2026" : detailFull}</div>` : ""}
+            </span>
+            <span class="task-activity-time" style="white-space:nowrap;flex-shrink:0" title="${a.timestamp ? escHtml(fmtTimestamp(a.timestamp)) : ""}">${relTime(a.timestamp)}</span>
+          </div>`;
+    }).join("")}
+      </div>
+    </div>
+    ` : `
+    <div style="margin-bottom:16px;padding:16px;text-align:center;color:var(--text-muted);font-size:12px;border:1px dashed var(--border);border-radius:8px">
+      No activity recorded yet
+    </div>
+    `}
+
+    <div class="confirm-actions" style="margin-top:20px;justify-content:space-between">
+      <div style="display:flex;gap:8px">
+        ${item.status !== "done" && item.assignee && !item.dispatchedAt ? `<button class="btn btn-sm" id="modalDispatch" style="font-size:11px">\u{1F680} Dispatch</button>` : ""}
+        ${item.status !== "done" ? `<button class="btn btn-sm btn-approve" id="modalComplete" style="font-size:11px">\u2713 Complete</button>` : ""}
+        <button class="btn btn-reject btn-sm" id="modalDelete" style="font-size:11px">Delete</button>
+        ${activity.length ? `<button class="btn btn-sm" id="modalClearActivity" style="opacity:0.6;font-size:11px">Clear Log</button>` : ""}
+      </div>
+      <button class="btn" id="modalClose">Close</button>
+    </div>
+  `;
+    m.body.querySelector("#modalClose").addEventListener("click", () => m.close());
+    m.body.querySelector("#modalDelete")?.addEventListener("click", async () => {
+      m.close();
       try {
-        await assignQueueItem(taskId, agent);
-        close();
+        await deleteQueueItem(taskId);
       } catch (err) {
-        console.error("Failed to assign task:", err);
+        console.error(err);
+      }
+    });
+    m.body.querySelector("#modalComplete")?.addEventListener("click", async () => {
+      m.close();
+      try {
+        await completeQueueItem(taskId, item.assignee || "human");
+      } catch (err) {
+        console.error(err);
+      }
+    });
+    m.body.querySelector("#modalDispatch")?.addEventListener("click", async () => {
+      const btn = m.body.querySelector("#modalDispatch");
+      btn.textContent = "Sending\u2026";
+      btn.classList.add("disabled");
+      try {
+        await dispatchQueueItem(taskId);
+        m.close();
+      } catch {
+        btn.textContent = "\u{1F680} Dispatch";
+        btn.classList.remove("disabled");
+      }
+    });
+    m.body.querySelector("#modalClearActivity")?.addEventListener("click", async () => {
+      m.close();
+      try {
+        await clearQueueItemActivity(taskId);
+      } catch (err) {
+        console.error(err);
       }
     });
   }
-  function renderQueueColumn(label, key, dotClass, items) {
-    const pillMap = {
-      inbox: "pill-inbox",
-      assigned: "pill-assigned",
-      in_progress: "pill-in-progress",
-      review: "pill-review",
-      done: "pill-done"
-    };
+  var PILL_MAP = {
+    inbox: "pill-inbox",
+    assigned: "pill-assigned",
+    in_progress: "pill-in-progress",
+    review: "pill-review",
+    done: "pill-done"
+  };
+  function renderCol(label, key, dotClass, items) {
     return `
     <div class="queue-col">
       <div class="queue-col-header">
@@ -1160,12 +1632,12 @@
         <span class="queue-col-count">${items.length}</span>
       </div>
       <div class="queue-cards-list">
-        ${items.length ? items.map((i) => renderTaskCard(i, pillMap)).join("") : `<div class="empty-state" style="padding:20px"><div class="empty-state-text" style="opacity:0.4">No ${label.toLowerCase()} items</div></div>`}
+        ${items.length ? items.map((i) => renderCard(i)).join("") : `<div class="empty-state" style="padding:20px"><div class="empty-state-text" style="opacity:0.4">No ${label.toLowerCase()} items</div></div>`}
       </div>
     </div>`;
   }
-  function renderTaskCard(item, pillMap) {
-    const statusLabel = {
+  function renderCard(item) {
+    const STATUS_LABEL = {
       inbox: "Inbox",
       assigned: "Assigned",
       in_progress: "In Progress",
@@ -1173,19 +1645,40 @@
       done: "Done"
     };
     const priClass = item.priority === "critical" ? "critical" : item.priority === "high" ? "high-priority" : "";
-    const isUserTask = item.source === "user";
-    const nextStatusMap = {
-      inbox: [{ label: "\u25B8 Start", status: "in_progress" }],
-      assigned: [{ label: "\u25B8 Start", status: "in_progress" }],
-      in_progress: [{ label: "Review", status: "review" }, { label: "\u2713 Done", status: "done" }],
-      review: [{ label: "\u2713 Done", status: "done" }],
-      done: []
-    };
-    const transitions = isUserTask ? nextStatusMap[item.status] || [] : [];
+    const actions = [];
+    if (item.status !== "done") {
+      const label = item.assignee ? "Reassign" : "Assign";
+      actions.push(`<button class="btn btn-sm" data-assign-id="${item.id}" title="${label}">${label}</button>`);
+    }
+    if (item.status === "assigned" && item.assignee && !item.dispatchedAt) {
+      actions.push(`<button class="btn btn-sm btn-dispatch" data-dispatch-id="${item.id}" title="Send to agent">\u{1F680} Dispatch</button>`);
+    }
+    if (item.status === "inbox" || item.status === "assigned") {
+      actions.push(`<button class="btn btn-sm btn-approve" data-move-id="${item.id}" data-move-status="in_progress">\u25B8 Start</button>`);
+    } else if (item.status === "in_progress") {
+      actions.push(`<button class="btn btn-sm" data-move-id="${item.id}" data-move-status="review">Review</button>`);
+      actions.push(`<button class="btn btn-sm btn-approve" data-move-id="${item.id}" data-move-status="done">\u2713 Done</button>`);
+    } else if (item.status === "review") {
+      actions.push(`<button class="btn btn-sm btn-approve" data-move-id="${item.id}" data-move-status="done">\u2713 Done</button>`);
+    }
+    if (item.status === "done") {
+      actions.push(`<button class="btn btn-sm btn-reject" data-delete-id="${item.id}" title="Remove">\u2715</button>`);
+    }
+    const dispatchedTag = item.dispatchedAt ? `<span class="task-dispatched-tag" title="Dispatched ${relTime(item.dispatchedAt)}">\u{1F680} Dispatched</span>` : "";
+    const activity = item.activity || [];
+    const recentActivity = activity.length > 0 ? (() => {
+      const last = activity[activity.length - 1];
+      return `<div style="font-size:10px;color:var(--text-muted);margin-top:6px;display:flex;align-items:center;gap:4px">
+          <span>${ACTIVITY_ICONS[last.action] || "\u2022"}</span>
+          <span>${escHtml(last.actor)}: ${escHtml(last.action)}</span>
+          <span style="margin-left:auto">${relTime(last.timestamp)}</span>
+        </div>`;
+    })() : "";
     return `
-    <div class="task-card ${priClass}">
+    <div class="task-card ${priClass}" data-task-id="${item.id}" style="cursor:pointer">
       <div class="task-card-header">
-        <span class="task-status-pill ${pillMap[item.status] || ""}">${statusLabel[item.status] || item.status}</span>
+        <span class="task-status-pill ${PILL_MAP[item.status] || ""}">${STATUS_LABEL[item.status] || item.status}</span>
+        ${dispatchedTag}
         ${item.riskLevel ? `<span class="approval-risk risk-${item.riskLevel}">Risk: ${item.riskLevel}</span>` : ""}
       </div>
       <div class="task-card-title">${escHtml(item.title)}</div>
@@ -1194,12 +1687,8 @@
         ${item.assignee ? `<div class="task-assignee"><div class="mini-avatar" style="background:${agentColor(item.assignee)}15;color:${agentColor(item.assignee)}">${initials(item.assignee)}</div>${escHtml(item.assignee)}</div>` : `<div class="task-assignee" style="color:var(--text-muted)">Unassigned</div>`}
         <span class="task-priority priority-${item.priority}">${item.priority}</span>
       </div>
-      ${isUserTask ? `
-      <div class="task-card-actions">
-        ${!item.assignee ? `<button class="btn btn-sm" data-assign-id="${item.id}" title="Assign to agent">Assign</button>` : `<button class="btn btn-sm" data-assign-id="${item.id}" title="Reassign">Reassign</button>`}
-        ${transitions.map((t) => `<button class="btn btn-sm btn-approve" data-move-id="${item.id}" data-move-status="${t.status}">${t.label}</button>`).join("")}
-        ${item.status === "done" ? `<button class="btn btn-sm btn-reject" data-delete-id="${item.id}" title="Remove">\u2715</button>` : ""}
-      </div>` : ""}
+      ${recentActivity}
+      ${actions.length ? `<div class="task-card-actions">${actions.join("")}</div>` : ""}
     </div>`;
   }
 
@@ -1298,7 +1787,7 @@
           <div class="team-card-role">${escHtml(isHero ? agent.theme || "Chief of Staff" : agent.theme || "Unassigned")}</div>
         </div>
       </div>
-      <div class="team-card-desc">${escHtml(desc)}</div>
+      <div class="team-card-desc">${agent.currentTask ? `\u2699\uFE0F Working on: ${escHtml(agent.currentTask)}` : escHtml(desc)}</div>
       ${skills.length ? `
       <div class="team-card-tags">
         ${skills.map((s) => `<span class="team-tag ${activeSkillNames.includes(s) ? "team-tag--on" : ""}">${escHtml(s)}</span>`).join("")}
@@ -1369,16 +1858,16 @@
     const skillCheckboxes = document.querySelectorAll("#addAgentSkills input[type=checkbox]:checked");
     const selectedSkills = Array.from(skillCheckboxes).map((cb) => cb.value);
     if (!name) {
-      showAlertDialog({ message: "Agent name is required", variant: "warning" });
+      showAlert({ message: "Agent name is required", variant: "warning" });
       return;
     }
     if (!/^[a-zA-Z0-9 _-]+$/.test(name)) {
-      showAlertDialog({ message: "Agent name must contain only letters, numbers, spaces, hyphens, and underscores", variant: "warning" });
+      showAlert({ message: "Agent name must contain only letters, numbers, spaces, hyphens, and underscores", variant: "warning" });
       return;
     }
     const folderId = name.replace(/\s+/g, "_");
     if (state.agents.some((a) => a.name === name || a.id === name || a.name === folderId || a.id === folderId)) {
-      showAlertDialog({ message: `Agent "${name}" already exists`, variant: "warning" });
+      showAlert({ message: `Agent "${name}" already exists`, variant: "warning" });
       return;
     }
     closeAddAgentModal();
@@ -1396,7 +1885,7 @@
     } catch (err) {
       state.agents = state.agents.filter((a) => a.name !== name);
       renderPage();
-      showAlertDialog({ title: "Add Agent Failed", message: String(err.message || err), variant: "error" });
+      showAlert({ title: "Add Agent Failed", message: String(err.message || err), variant: "error" });
     }
   }
   var TABS = [
@@ -1699,7 +2188,7 @@
     });
   }
   async function handleDeleteAgent(name) {
-    const confirmed = await showConfirmDialog({
+    const confirmed = await showConfirm({
       title: "Delete Agent",
       message: `Delete agent "${name}" and all workspace files? This cannot be undone.`,
       confirmLabel: "Delete",
@@ -1713,7 +2202,7 @@
     try {
       await deleteAgent(name);
     } catch (err) {
-      showAlertDialog({ title: "Delete Agent Failed", message: String(err.message || err), variant: "error" });
+      showAlert({ title: "Delete Agent Failed", message: String(err.message || err), variant: "error" });
     }
   }
   function showRoleCardModal(agentName) {

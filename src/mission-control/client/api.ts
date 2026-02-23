@@ -27,11 +27,30 @@ export async function fetchDashboard(): Promise<void> {
     state.dashboard = data;
     state.agents = data.agents?.list || [];
     state.queue = data.queue?.items || [];
-    state.feed = data.feed || [];
     state.gateway = data.gateway || "disconnected";
     state.gatewayHealth = data.gatewayHealth || null;
     state.presence = data.presence || [];
     state.usageCost = data.usageCost || [];
+
+    // Merge server feed with existing client feed (preserve SSE-accumulated events)
+    const serverFeed = data.feed || [];
+    if (state.feed.length === 0) {
+      state.feed = serverFeed;
+    } else {
+      const existingIds = new Set(state.feed.map((e: any) => e.id || `${e.timestamp}|${e.title}`));
+      for (const ev of serverFeed) {
+        const key = ev.id || `${ev.timestamp}|${ev.title}`;
+        if (!existingIds.has(key)) {
+          state.feed.push(ev);
+          existingIds.add(key);
+        }
+      }
+      // Sort newest first and cap at 200
+      state.feed.sort((a: any, b: any) =>
+        new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+      );
+      if (state.feed.length > 200) state.feed.length = 200;
+    }
 
     const stableJson = JSON.stringify(data, (key, value) => {
       if (key === "lastSeen" || key === "tokenUsage" || key === "percentUsed" || key === "contextTokens") return undefined;
@@ -285,6 +304,66 @@ export async function deleteQueueItem(id: string): Promise<any> {
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || "Failed to delete task");
+  await fetchDashboard();
+  return data;
+}
+
+export async function dispatchQueueItem(id: string): Promise<any> {
+  const res = await fetch(`${API}/api/queue/dispatch`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Failed to dispatch task");
+  await fetchDashboard();
+  return data;
+}
+
+export async function completeQueueItem(id: string, actor?: string, summary?: string): Promise<any> {
+  const res = await fetch(`${API}/api/queue/complete`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id, actor, summary }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Failed to complete task");
+  await fetchDashboard();
+  return data;
+}
+
+export async function assignAndDispatchQueueItem(id: string, assignee: string): Promise<any> {
+  const res = await fetch(`${API}/api/queue/assign`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id, assignee, autoDispatch: true }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Failed to assign and dispatch task");
+  await fetchDashboard();
+  return data;
+}
+
+export async function clearQueueItemActivity(id: string): Promise<any> {
+  const res = await fetch(`${API}/api/queue/clear-activity`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Failed to clear activity");
+  await fetchDashboard();
+  return data;
+}
+
+export async function clearAllQueueItems(): Promise<any> {
+  const res = await fetch(`${API}/api/queue/clear-all`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({}),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Failed to clear all tasks");
   await fetchDashboard();
   return data;
 }

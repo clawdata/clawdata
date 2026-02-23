@@ -131,9 +131,12 @@ export function showConfirmDialog(opts: ConfirmOptions): Promise<boolean> {
       resolve(result);
     };
 
-    overlay.querySelector(".confirm-cancel")!.addEventListener("click", () => close(false));
-    overlay.querySelector(".confirm-ok")!.addEventListener("click", () => close(true));
-    overlay.addEventListener("click", (e) => { if (e.target === overlay) close(false); });
+    overlay.querySelector(".confirm-cancel")!.addEventListener("click", (e) => { e.stopPropagation(); close(false); });
+    overlay.querySelector(".confirm-ok")!.addEventListener("click", (e) => { e.stopPropagation(); close(true); });
+    overlay.querySelector(".confirm-dialog")!.addEventListener("click", (e) => e.stopPropagation());
+    overlay.addEventListener("click", (e) => { if (e.target === overlay) { e.preventDefault(); close(false); } });
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") { e.preventDefault(); close(false); document.removeEventListener("keydown", onKey); } };
+    document.addEventListener("keydown", onKey);
     setTimeout(() => (overlay.querySelector(".confirm-cancel") as HTMLElement)?.focus(), 50);
   });
 }
@@ -173,8 +176,11 @@ export function showAlertDialog(opts: AlertOptions | string): Promise<void> {
       resolve();
     };
 
-    overlay.querySelector(".confirm-ok")!.addEventListener("click", close);
-    overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
+    overlay.querySelector(".confirm-ok")!.addEventListener("click", (e) => { e.stopPropagation(); close(); });
+    overlay.querySelector(".confirm-dialog")!.addEventListener("click", (e) => e.stopPropagation());
+    overlay.addEventListener("click", (e) => { if (e.target === overlay) { e.preventDefault(); close(); } });
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") { e.preventDefault(); close(); document.removeEventListener("keydown", onKey); } };
+    document.addEventListener("keydown", onKey);
     setTimeout(() => (overlay.querySelector(".confirm-ok") as HTMLElement)?.focus(), 50);
   });
 }

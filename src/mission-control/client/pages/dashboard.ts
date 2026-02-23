@@ -30,7 +30,7 @@ export function renderDashboardPage(): void {
           <div class="stat-card-delta positive">${activeCount} active</div>
         </div>
         <div class="stat-card">
-          <div class="stat-card-value">${(d as any).queue?.total || 0}</div>
+          <div class="stat-card-value">${((d as any).queue?.total || 0) - ((d as any).queue?.done || 0)}</div>
           <div class="stat-card-label">Queue Items</div>
           <div class="stat-card-delta">${(d as any).queue?.inProgress || 0} in progress</div>
         </div>
@@ -104,7 +104,7 @@ function renderMiniAgentList(agents: any[]): string {
         </div>
         <div class="mini-agent-info">
           <div class="mini-agent-name">${escHtml(a.name)}</div>
-          <div class="mini-agent-meta">${escHtml(a.role || "Agent")} · ${a.model ? escHtml(a.model) : "—"}</div>
+          <div class="mini-agent-meta">${a.currentTask ? `⚙️ ${escHtml(a.currentTask)}` : `${escHtml(a.role || "Agent")} · ${a.model ? escHtml(a.model) : "—"}`}</div>
         </div>
         ${pct ? `<div class="mini-agent-usage"><div class="mini-usage-bar"><div class="mini-usage-fill" style="width:${pct}%"></div></div><span class="mini-usage-pct">${pct}%</span></div>` : ""}
       </div>`;

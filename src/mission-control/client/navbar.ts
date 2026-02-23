@@ -10,7 +10,7 @@ export function renderNavbar(): void {
   const agents = $("statAgentsActive");
   const queue = $("statTasksQueue");
   if (agents) agents.textContent = String(d?.agents?.active || state.agents.filter(a => a.status === "working").length);
-  if (queue) queue.textContent = String(d?.queue?.total || state.queue.length);
+  if (queue) queue.textContent = String((d?.queue?.total || state.queue.length) - (d?.queue?.done || 0));
 
   const badge = $("projectBadge");
   if (d?.project && badge) badge.textContent = d.project.toUpperCase();

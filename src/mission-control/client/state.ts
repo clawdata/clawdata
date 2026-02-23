@@ -28,6 +28,7 @@ export interface FeedEvent {
   type: string;
   title: string;
   detail?: string;
+  body?: string;
   timestamp: string;
   actor?: string;
   icon?: string;
@@ -44,6 +45,13 @@ export interface Skill {
   tags?: string[];
 }
 
+export interface TaskActivity {
+  timestamp: string;
+  actor: string;
+  action: string;
+  detail?: string;
+}
+
 export interface QueueItem {
   id: string;
   title: string;
@@ -56,7 +64,10 @@ export interface QueueItem {
   steps?: string[];
   createdAt?: string;
   updatedAt?: string;
+  dispatchedAt?: string;
+  completedAt?: string;
   tags?: string[];
+  activity?: TaskActivity[];
 }
 
 export interface GatewayHealth {
@@ -163,6 +174,7 @@ export interface AppState {
   memorySelectedAgent: string | null;
   memorySelectedFile: string | null;
   memoryFileContent: string | null;
+  hideDebug: boolean;
 }
 
 // ── State singleton ──────────────────────────────────────────────────
@@ -192,4 +204,5 @@ export const state: AppState = {
   memorySelectedAgent: null,
   memorySelectedFile: null,
   memoryFileContent: null,
+  hideDebug: true,
 };
