@@ -7,45 +7,45 @@
       "seats": [
         {
           "id": "s1",
-          "x": 20,
+          "x": 15,
           "y": 20,
           "label": "Desk A1"
         },
         {
           "id": "s2",
-          "x": 46,
+          "x": 50,
           "y": 18,
           "label": "Desk A2"
         },
         {
           "id": "s3",
-          "x": 80,
+          "x": 70,
           "y": 20,
           "label": "Desk A3"
         },
         {
           "id": "s4",
           "x": 20,
-          "y": 52,
+          "y": 45,
           "label": "Desk B1"
         },
         {
           "id": "s5",
-          "x": 46,
-          "y": 52,
+          "x": 50,
+          "y": 65,
           "label": "Desk B2"
         },
         {
           "id": "s6",
-          "x": 80,
-          "y": 52,
+          "x": 75,
+          "y": 70,
           "label": "Desk B3"
         },
         {
           "id": "s7",
-          "x": 48,
-          "y": 88,
-          "label": "Lounge"
+          "x": 50,
+          "y": 85,
+          "label": "Enterance"
         }
       ]
     },
@@ -136,11 +136,13 @@
       ]
     }
   ],
-  "activePlanId": "lair-office",
+  "activePlanId": "regular-office",
   "assignments": {
     "regular-office": {
-      "s6": "main",
-      "s5": "harry"
+      "s2": "harry",
+      "s1": "main",
+      "s5": "mel",
+      "s4": "david"
     },
     "lair-office": {
       "s1": "main",
