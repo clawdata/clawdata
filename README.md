@@ -27,11 +27,6 @@ clawdata mc
 ```
 
 <p align="center">
-  <img src="media/github/office.png" alt="Office overview" width="700" />
-  <br/><em>Office view: See all agents, desks, and active tasks at a glance</em>
-</p>
-
-<p align="center">
   <img src="media/github/agents.png" alt="Agent management" width="700" />
   <br/><em>Agent management: Configure and monitor AI data engineers</em>
 </p>
@@ -44,6 +39,11 @@ clawdata mc
 <p align="center">
   <img src="media/github/dashboard.png" alt="Analytics dashboard" width="700" />
   <br/><em>Dashboard: Real-time metrics and workspace analytics</em>
+</p>
+
+<p align="center">
+  <img src="media/github/office.png" alt="Office overview" width="700" />
+  <br/><em>Office view: See all agents, desks, and active tasks at a glance</em>
 </p>
 
 ## Demo
