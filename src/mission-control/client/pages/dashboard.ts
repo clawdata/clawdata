@@ -4,10 +4,10 @@
 
 import { state } from "../state.js";
 import { escHtml, agentColor, initials, timeAgo } from "../utils.js";
-import { setPageContent } from "../router.js";
+import { setPageContent, suppressRender, resumeRender } from "../router.js";
 import { renderFeedItems, handleFeedClick, showFeedDetailModal } from "./feed.js";
 import { openModal } from "../modal.js";
-import { addQueueItem } from "../api.js";
+import { API } from "../api.js";
 
 export function renderDashboardPage(): void {
   const d = state.dashboard || {};
@@ -158,6 +158,10 @@ const statusColors: Record<string, string> = {
 function showAgentActivityModal(agent: any): void {
   const m = openModal({ maxWidth: "600px" });
 
+  // Suppress page re-renders while the modal is open to prevent flicker
+  suppressRender();
+  m.onClose(() => resumeRender());
+
   const c = agentColor(agent.name);
   const emoji = agent.identEmoji || "";
   const displayName = agent.identName || agent.name;
@@ -220,7 +224,14 @@ function showAgentActivityModal(agent: any): void {
     sendBtn.disabled = true;
     sendBtn.textContent = "Sending…";
     try {
-      await addQueueItem({ title: text, assignee: agent.name, priority: "medium" });
+      // Call API directly (skip fetchDashboard to avoid re-rendering behind the modal)
+      const res = await fetch(`${API}/api/queue/add`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: text, assignee: agent.name, priority: "medium" }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to add task");
       input.value = "";
       input.placeholder = "✓ Sent! Ask something else…";
     } catch (err: any) {

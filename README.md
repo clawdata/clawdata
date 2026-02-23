@@ -18,10 +18,38 @@ It ships with **15 skills** covering databases, orchestration, ingestion, storag
 
 And because it's fully open source, you can **add your own skills** for any tool your team uses.
 
+## Mission Control
+
+Launch Mission Control — a web-based dashboard for managing your data workspace:
+
+```bash
+clawdata mc
+```
+
+<p align="center">
+  <img src="media/github/office.png" alt="Office overview" width="700" />
+  <br/><em>Office view: See all agents, desks, and active tasks at a glance</em>
+</p>
+
+<p align="center">
+  <img src="media/github/agents.png" alt="Agent management" width="700" />
+  <br/><em>Agent management: Configure and monitor AI data engineers</em>
+</p>
+
+<p align="center">
+  <img src="media/github/skillsregistry.png" alt="Skills registry" width="700" />
+  <br/><em>Skills registry: Browse and manage your 15 data engineering skills</em>
+</p>
+
+<p align="center">
+  <img src="media/github/dashboard.png" alt="Analytics dashboard" width="700" />
+  <br/><em>Dashboard: Real-time metrics and workspace analytics</em>
+</p>
+
 ## Demo
 
 <p align="center">
-  <img src="demo.gif" alt="ClawData demo" width="700" />
+  <img src="media/github/demo.gif" alt="ClawData demo" width="700" />
 </p>
 
 ## Quick start
@@ -35,23 +63,24 @@ openclaw onboard --install-daemon
 git clone https://github.com/clawdata/clawdata.git && cd clawdata
 ./setup.sh
 
-# 3. Start OpenClaw and ask it to work with your data
-openclaw tui
+# 3. Start Mission Control or chat directly with OpenClaw
+clawdata mc              # Web dashboard (opens http://localhost:3200)
+# OR
+openclaw tui             # Terminal interface
 ```
 
-The setup script installs dependencies, opens an interactive skill picker, and links everything into OpenClaw. That's it — start chatting.
+The setup script installs dependencies, opens an interactive skill picker, and links everything into OpenClaw. That's it — start chatting or exploring the dashboard.
 
 ## What can it do?
 
-Once skills are linked, OpenClaw can handle requests like:
+Once skills are linked, OpenClaw can handle data engineering requests naturally:
 
-> *"Load the CSV files and show me what's in the data"*
-> *"Run the dbt models and tell me if any tests fail"*
-> *"Which customers have the highest lifetime value?"*
+> *"Load the CSV files and show me what's in the data"*  
+> *"Run the dbt models and tell me if any tests fail"*  
+> *"Which customers have the highest lifetime value?"*  
 > *"Create a new dbt model that aggregates orders by month"*
-> *"Show me the Airflow DAG structure"*
 
-No MCP servers, no stdio protocols — just command-line tools that the AI agent calls on your behalf.
+Just command-line tools that the AI agent calls on your behalf.
 
 ## Skills
 
@@ -79,155 +108,64 @@ Each skill is a `SKILL.md` file that teaches the agent when and how to use the t
 
 ```bash
 clawdata skills          # interactive: toggle skills on/off
-clawdata setup           # first-run wizard: picks skills + verifies prerequisites
 clawdata doctor          # check that everything is configured correctly
 ```
 
-## The `clawdata` CLI
+## The `clawdata` helper
 
-The CLI is both the engine behind the skills and a standalone tool you can use directly.
+The CLI provides quick access to common workflows:
 
 ```bash
+clawdata mc              # open Mission Control dashboard (port 3200)
+clawdata skills          # manage which skills are enabled
+clawdata doctor          # verify setup and configuration
 clawdata help            # full command reference
 ```
 
-**Data** — load and manage files:
-```bash
-clawdata data list                     # show files in data/
-clawdata data ingest-all               # load everything into DuckDB
-clawdata data ingest "logs/*.json"     # glob/URL/Excel ingestion
-clawdata data reset                    # delete warehouse and start fresh
-```
+## Architecture
 
-**Database** — query DuckDB directly:
-```bash
-clawdata db tables                     # list all tables
-clawdata db query "SELECT ..."         # run SQL
-clawdata db schema fct_orders          # show columns and types
-clawdata db profile dim_customers      # column-level stats
-clawdata db sample fct_orders          # quick preview
-clawdata db export "SELECT ..." -o out.parquet
-```
+ClawData includes sample data and a medallion-architecture dbt project:
 
-**dbt** — run transformations:
-```bash
-clawdata dbt run                       # build all models
-clawdata dbt test                      # run schema & data tests
-clawdata dbt models                    # list available models
-clawdata dbt lineage                   # ASCII DAG of dependencies
-clawdata dbt docs --serve              # open docs site
-```
+- **Bronze** — raw ingestion views (`SELECT *` from source)
+- **Silver** — cleans, deduplicates, normalises, and validates
+- **Gold** — dimensional model (dims + facts) and analytics
 
-**Workflow:**
-```bash
-clawdata run                           # full pipeline: ingest → dbt run → test
-clawdata watch                         # re-run models on file change
-clawdata serve                         # HTTP API mode
-clawdata config                        # view/edit environment config
-```
-
-## Data architecture
-
-ClawData ships with sample data and a medallion-architecture dbt project:
-
-```
-Sources (CSV)        Bronze (views)       Silver (tables)         Gold (tables)
-─────────────        ──────────────       ───────────────         ────────────
-sample_customers  →  brz_customers    →  slv_customers (dedup)  →  dim_customers
-sample_products   →  brz_products     →  slv_products (clean)   →  dim_products
-sample_orders     →  brz_orders       →  slv_orders (normalise) →  fct_orders
-                                        slv_order_items           gld_customer_analytics
-sample_payments   →  brz_payments     →  slv_payments (validate)→  gld_revenue_summary
-```
-
-- **Bronze** — raw ingestion views (`SELECT *` from source), written to `bronze` schema
-- **Silver** — cleans, deduplicates, normalises, and validates raw data
-- **Gold** — dimensional model (dims + facts) and analytical aggregates
-
-## Project layout
+## Project structure
 
 ```
 clawdata/
-├── skills/                ← Skill definitions (15 × SKILL.md)
-│   ├── duckdb/
-│   ├── dbt/
-│   ├── snowflake/
-│   ├── airflow/
-│   ├── postgres/
-│   ├── bigquery/
-│   ├── databricks/
-│   ├── spark/
-│   ├── s3/
-│   ├── kafka/
-│   ├── dlt/
-│   ├── dagster/
-│   ├── fivetran/
-│   ├── great-expectations/
-│   └── metabase/
+├── skills/                ← 15 skill definitions (SKILL.md files)
 ├── src/                   ← TypeScript CLI source
-│   ├── cli.ts             ← Entry point & dispatcher
-│   ├── commands/          ← data, db, dbt, doctor, serve, …
-│   ├── lib/               ← database, ingestor, dbt, adapters, plugins
-│   └── tui/               ← Interactive skill selector
-├── apps/
-│   ├── dbt/               ← dbt project (bronze/silver/gold models)
-│   ├── airflow/           ← Airflow DAGs (dynamic, Docker-based)
-│   ├── prefect/           ← Prefect flows (alternative orchestrator)
-│   ├── jupyter/           ← Pre-configured notebooks + DuckDB helpers
-│   ├── streamlit/         ← Data explorer UI
-│   ├── evidence/          ← Markdown-based analytics dashboards
-│   └── lightdash/         ← BI project (Docker Compose)
-├── data/                  ← DuckDB warehouse lives here
-│   └── sample/            ← Sample CSV files
-└── setup.sh               ← One-command bootstrap
+│   ├── mission-control/   ← Web dashboard
+│   └── lib/               ← Core functionality
+├── templates/             ← Sample apps (dbt, Jupyter, Evidence, etc.)
+└── data/                  ← DuckDB warehouse + sample files
 ```
 
-## Contributing your own skills
+## Adding custom skills
 
-ClawData is designed to be extended. Adding a new skill is straightforward:
+Create a `SKILL.md` file in `skills/your-tool/` that teaches the AI how to use your tool:
 
-1. **Create a folder** under `skills/` with a `SKILL.md`:
-   ```
-   skills/my-tool/SKILL.md
-   ```
+```markdown
+---
+name: my-tool
+description: What this skill does
+tools:
+  - my-tool-cli
+---
 
-2. **Write the skill file** — this is what teaches the AI agent how to use your tool:
-   ```markdown
-   ---
-   name: my-tool
-   description: Short description of what this skill does
-   tools:
-     - my-tool-cli
-   ---
+## When to use
+When the user asks for...
 
-   ## When to use
-   Explain when this skill is relevant.
+## Commands
+List available commands and what they do.
+```
 
-   ## Commands
-   List the commands the agent can run and what they do.
-
-   ## Examples
-   Show example interactions.
-   ```
-
-3. **Link it** — run `clawdata skills` to link your new skill into OpenClaw
-
-That's it. The agent will pick up the new skill on its next conversation.
-
-Pull requests welcome — the more skills, the more useful ClawData becomes for everyone.
+Then run `clawdata skills` to enable it. The agent will discover it automatically.
 
 ## Configuration
 
-All environment variables are auto-detected. Override only if needed:
-
-| Variable | Default | Purpose |
-|----------|---------|---------|
-| `CLAWDATA_ROOT` | auto | Project root |
-| `DB_PATH` | `data/warehouse.duckdb` | DuckDB file path |
-| `DATA_FOLDER` | `data/` | Incoming data directory |
-| `DBT_PROJECT_DIR` | `apps/dbt/` | dbt project location |
-| `DBT_PROFILES_DIR` | `apps/dbt/` | dbt profiles location |
-| `AIRFLOW_DAGS_FOLDER` | `apps/airflow/dags/` | Airflow DAGs directory |
+Configuration is auto-detected. Run `clawdata doctor` to verify your setup.
 
 ## License
 

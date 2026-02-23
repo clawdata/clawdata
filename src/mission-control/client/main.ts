@@ -53,6 +53,8 @@ import {
   saveMemoryFile,
   refreshMemory,
 } from "./pages/memory.js";
+import { renderOfficePage, officeSelectPlan } from "./pages/office.js";
+import { renderSettingsPage } from "./pages/settings.js";
 
 // ─── Expose handlers for inline onclick attributes ───────────────
 
@@ -93,6 +95,7 @@ window.__mc = {
   cancelMemoryEdit,
   saveMemoryFile,
   refreshMemory,
+  officeSelectPlan,
 };
 
 // ─── Event Bindings ──────────────────────────────────────────────
@@ -155,6 +158,8 @@ function initEventBindings(): void {
   registerPage("usage", renderUsagePage);
   registerPage("gateway", renderGatewayPage);
   registerPage("memory", renderMemoryPage);
+  registerPage("office", renderOfficePage);
+  registerPage("settings", renderSettingsPage);
 
   // Initial data fetch
   await fetchDashboard();

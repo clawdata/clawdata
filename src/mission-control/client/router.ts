@@ -54,8 +54,20 @@ export function renderPage(): void {
 }
 
 let _renderDebounce: ReturnType<typeof setTimeout> | null = null;
+let _renderSuppressed = false;
+let _pendingRender = false;
+
+/** Temporarily suppress debouncedRenderPage (e.g. while a modal is open). */
+export function suppressRender(): void { _renderSuppressed = true; _pendingRender = false; }
+
+/** Resume rendering; if a render was requested while suppressed, fire it now. */
+export function resumeRender(): void {
+  _renderSuppressed = false;
+  if (_pendingRender) { _pendingRender = false; debouncedRenderPage(); }
+}
 
 export function debouncedRenderPage(): void {
+  if (_renderSuppressed) { _pendingRender = true; return; }
   if (_renderDebounce) clearTimeout(_renderDebounce);
   _renderDebounce = setTimeout(() => {
     _renderDebounce = null;

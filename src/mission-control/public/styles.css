@@ -135,11 +135,11 @@ button { border: none; background: none; color: inherit; cursor: pointer; font-f
 
 .navbar-brand { display: flex; align-items: center; gap: 8px; }
 .brand-icon { width: 20px; height: 20px; fill: var(--accent-orange); }
+.brand-icon-img { width: 28px; height: 28px; border-radius: 6px; object-fit: contain; }
 .brand-title {
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 700;
-  letter-spacing: 1.5px;
-  text-transform: uppercase;
+  letter-spacing: 1px;
   color: var(--text-primary);
 }
 .brand-project {
@@ -2539,4 +2539,1181 @@ textarea.task-form-input {
 @media (max-width: 1000px) {
   .memory-layout { grid-template-columns: 180px 1fr; }
   .memory-files-panel { display: none; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Office Page
+   ═══════════════════════════════════════════════════════════════════ */
+
+.office-canvas {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.office-floor {
+  position: absolute;
+  inset: 0;
+  background: var(--bg-surface);
+  overflow: hidden;
+}
+
+.office-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+.office-grid-bg {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(var(--border) 1px, transparent 1px),
+    linear-gradient(90deg, var(--border) 1px, transparent 1px);
+  background-size: 40px 40px;
+  opacity: 0.3;
+  pointer-events: none;
+}
+
+/* ── Seats ───────────────────────────────────────────────────────── */
+
+.office-seat {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  cursor: default;
+  z-index: 2;
+  transition: transform 0.15s ease;
+}
+
+.office-seat:hover {
+  transform: translate(-50%, -50%) scale(1.08);
+  z-index: 5;
+}
+
+.office-seat.drag-over .office-seat-circle {
+  border-color: var(--accent-orange) !important;
+  box-shadow: 0 0 12px var(--accent-orange);
+  transform: scale(1.15);
+}
+
+.office-seat-circle {
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
+  border: 3px dashed var(--border-light);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.4), 0 2px 8px rgba(0,0,0,0.2);
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.office-seat.occupied .office-seat-circle {
+  border-style: solid;
+  border-width: 4px;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 4px 24px rgba(0,0,0,0.45), 0 2px 12px rgba(0,0,0,0.25), 0 0 0 4px rgba(255,255,255,0.25);
+}
+
+.office-seat.empty .office-seat-circle:hover {
+  border-color: var(--accent-orange);
+  background: var(--bg-card-hover);
+}
+
+.office-seat-agent {
+  font-weight: 700;
+  font-size: 26px;
+  filter: drop-shadow(0 1px 2px rgba(0,0,0,0.3));
+}
+
+.office-seat-plus {
+  color: var(--text-muted);
+  font-size: 20px;
+  font-weight: 300;
+}
+
+.office-seat-label {
+  font-size: 10px;
+  color: #fff;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  font-weight: 600;
+  white-space: nowrap;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  background: rgba(0, 0, 0, 0.90);
+  padding: 2px 8px;
+  border-radius: 10px;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.9);
+  backdrop-filter: blur(4px);
+}
+
+.office-seat-name {
+  font-size: 15px;
+  color: #fff;
+  font-weight: 700;
+  white-space: nowrap;
+  background: rgba(0, 0, 0, 0.92);
+  padding: 3px 10px;
+  border-radius: 12px;
+  text-shadow: 0 2px 8px rgba(0,0,0,0.95);
+  letter-spacing: 0.4px;
+  backdrop-filter: blur(6px);
+}
+
+.office-seat-remove {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--accent-red);
+  color: white;
+  border: none;
+  font-size: 12px;
+  cursor: pointer;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  z-index: 10;
+}
+
+.office-seat:hover .office-seat-remove {
+  display: flex;
+}
+
+/* ── Speech Bubbles (on floor) ───────────────────────────────────── */
+
+.office-speech-bubble {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  background: var(--bg-card);
+  border: 1.5px solid var(--border-light);
+  border-radius: 10px;
+  padding: 8px 12px;
+  max-width: 360px;
+  min-width: 100px;
+  z-index: 20;
+  box-shadow: var(--shadow-md);
+  animation: office-bubble-in 0.3s ease-out;
+  pointer-events: none;
+}
+
+.office-speech-right {
+  left: 50%;
+  transform: translateX(-20%);
+}
+
+.office-speech-left {
+  right: 50%;
+  transform: translateX(20%);
+}
+
+.office-speech-text {
+  font-size: 12px;
+  color: var(--text-primary);
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.office-speech-tail {
+  position: absolute;
+  bottom: -7px;
+  width: 0;
+  height: 0;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-top: 7px solid var(--border-light);
+}
+
+.office-speech-tail-right {
+  left: 18px;
+}
+
+.office-speech-tail-left {
+  right: 18px;
+}
+
+/* Inner tail (fills with bg color to match bubble) */
+.office-speech-tail::after {
+  content: "";
+  position: absolute;
+  top: -9px;
+  left: -5px;
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 6px solid var(--bg-card);
+}
+
+@keyframes office-bubble-in {
+  0% {
+    opacity: 0;
+    transform: translateX(-20%) translateY(6px) scale(0.9);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(-20%) translateY(0) scale(1);
+  }
+}
+
+.office-speech-left.office-speech-bubble {
+  animation-name: office-bubble-in-left;
+}
+
+@keyframes office-bubble-in-left {
+  0% {
+    opacity: 0;
+    transform: translateX(20%) translateY(6px) scale(0.9);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(20%) translateY(0) scale(1);
+  }
+}
+
+/* clickable speech bubbles */
+.office-speech-clickable {
+  cursor: pointer;
+  pointer-events: auto;
+  transition: filter 0.15s ease;
+}
+.office-speech-clickable:hover {
+  filter: brightness(1.15);
+}
+.office-speech-more {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.65rem;
+  opacity: 0.55;
+  font-style: italic;
+}
+
+/* ── Floating FABs (legacy — top buttons removed) ────────────────── */
+
+.office-fab-top-left {
+  display: none;
+}
+
+.office-fab-top-right {
+  display: none;
+}
+
+.office-plan-select {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-primary);
+  padding: 6px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  min-width: 120px;
+  box-shadow: var(--shadow-md);
+  backdrop-filter: blur(8px);
+}
+.office-plan-select:focus {
+  border-color: var(--border-focus);
+  outline: none;
+}
+
+.office-fab-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text-primary);
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: var(--shadow-md);
+  transition: all 0.15s ease;
+  backdrop-filter: blur(8px);
+}
+.office-fab-btn:hover {
+  border-color: var(--accent-orange);
+  color: var(--accent-orange);
+  box-shadow: 0 2px 12px rgba(245,158,11,0.2);
+}
+.office-fab-sm {
+  padding: 6px 8px;
+  border-radius: 8px;
+}
+.office-fab-accent {
+  background: var(--accent-orange);
+  color: #fff;
+  border-color: var(--accent-orange);
+}
+.office-fab-accent:hover {
+  filter: brightness(1.1);
+  color: #fff;
+}
+.office-fab-active {
+  background: var(--accent-secondary, #f59e0b);
+  color: #000;
+  border-color: var(--accent-secondary, #f59e0b);
+  box-shadow: 0 0 10px rgba(245,158,11,0.45);
+}
+.office-fab-active:hover {
+  color: #000;
+}
+
+/* ── Floating Agent Pool (collapsed chat view) ───────────────────── */
+
+.office-fab-agents {
+  position: absolute;
+  bottom: 14px;
+  right: 14px;
+  width: 240px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 12px;
+  z-index: 35;
+  box-shadow: var(--shadow-lg);
+  backdrop-filter: blur(8px);
+  max-height: 260px;
+  overflow-y: auto;
+}
+.office-fab-agents-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.office-fab-agents-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.office-fab-agents-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* ── Panel Icon Buttons ──────────────────────────────────────────── */
+
+.office-panel-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+.office-panel-icon-btn:hover {
+  color: var(--accent-orange);
+  border-color: var(--accent-orange);
+  background: var(--bg-card-hover);
+}
+.office-panel-icon-active {
+  background: var(--accent-orange);
+  border-color: var(--accent-orange);
+  color: #fff;
+}
+.office-panel-icon-active:hover {
+  filter: brightness(1.1);
+  color: #fff;
+}
+
+/* ── Expanded Panel (agents + conversations) ─────────────────────── */
+
+.office-panel-expanded {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  bottom: 14px;
+  width: 320px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  z-index: 42;
+  display: flex;
+  flex-direction: column;
+  box-shadow: var(--shadow-lg);
+  backdrop-filter: blur(8px);
+  overflow: hidden;
+}
+.office-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.office-panel-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.office-panel-agents {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  max-height: 140px;
+  overflow-y: auto;
+  flex-shrink: 0;
+}
+
+/* ── Settings Dialog ─────────────────────────────────────────────── */
+
+.office-settings-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.45);
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0;
+}
+.office-settings-dialog {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  width: 320px;
+  max-width: 90%;
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+}
+.office-settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.office-settings-header h3 {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+.office-settings-close {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 18px;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+  border-radius: 4px;
+}
+.office-settings-close:hover {
+  color: var(--text-primary);
+  background: var(--bg-card-hover);
+}
+.office-settings-body {
+  padding: 16px;
+}
+.office-settings-field {
+  margin-bottom: 14px;
+}
+.office-settings-field label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 6px;
+}
+.office-settings-select {
+  width: 100%;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-primary);
+  padding: 8px 12px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.office-settings-select:focus {
+  border-color: var(--border-focus);
+  outline: none;
+}
+.office-settings-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* Wide settings dialog for floor plan management */
+.office-settings-wide {
+  width: 520px;
+  max-height: 85vh;
+}
+.office-settings-wide .office-settings-body {
+  max-height: calc(85vh - 50px);
+  overflow-y: auto;
+}
+
+/* Plan list */
+.office-settings-plan-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+.office-settings-plan-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-surface);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.office-settings-plan-item:hover {
+  background: var(--bg-card-hover);
+}
+.office-settings-plan-item.active {
+  border-color: var(--accent);
+  background: rgba(99,102,241,0.08);
+}
+.office-settings-plan-thumb {
+  width: 48px;
+  height: 36px;
+  border-radius: 6px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+.office-settings-plan-info {
+  flex: 1;
+  min-width: 0;
+}
+.office-settings-plan-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.office-settings-plan-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.office-settings-plan-active {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  flex-shrink: 0;
+}
+
+/* Edit section */
+.office-settings-edit-section {
+  border-top: 1px solid var(--border);
+  padding-top: 14px;
+  margin-top: 4px;
+}
+.office-settings-input {
+  width: 100%;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-primary);
+  padding: 8px 12px;
+  font-size: 12px;
+}
+.office-settings-input:focus {
+  border-color: var(--border-focus);
+  outline: none;
+}
+.office-settings-preview {
+  width: 100%;
+  height: 80px;
+  border-radius: 8px;
+  margin-top: 6px;
+  background-size: cover;
+  background-position: center;
+  border: 1px solid var(--border);
+}
+
+/* Seats list */
+.office-settings-seats {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 180px;
+  overflow-y: auto;
+}
+.office-settings-seat-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.office-settings-seat-label {
+  flex: 1;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-primary);
+  padding: 4px 8px;
+  font-size: 12px;
+}
+.office-settings-seat-label:focus {
+  border-color: var(--border-focus);
+  outline: none;
+}
+.office-settings-seat-pos {
+  font-size: 10px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  width: 80px;
+}
+.office-settings-seat-del {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 2px 4px;
+  border-radius: 4px;
+  line-height: 1;
+}
+.office-settings-seat-del:hover {
+  color: var(--danger);
+  background: rgba(239,68,68,0.1);
+}
+
+/* Bottom actions */
+.office-settings-bottom-actions {
+  display: flex;
+  gap: 8px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+  margin-top: 4px;
+}
+
+/* ── Chat Log (reused in expanded panel) ──────────────────────────── */
+
+.office-chat-panel {
+  display: none; /* legacy — now replaced by office-panel-expanded */
+}
+.office-chat-panel-header {
+  display: none;
+}
+.office-chat-panel-close {
+  display: none;
+}
+.office-chat-panel-close:hover {
+  color: var(--text-primary);
+  background: var(--bg-card-hover);
+}
+.office-fab-dim {
+  opacity: 0.6;
+}
+
+/* ── Chat Input Bar ──────────────────────────────────────────────── */
+
+.office-chat-input-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.office-chat-input {
+  flex: 1;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-primary);
+  padding: 7px 10px;
+  font-size: 12px;
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+.office-chat-input:focus {
+  border-color: var(--accent-orange);
+}
+.office-chat-input::placeholder {
+  color: var(--text-muted);
+}
+.office-chat-send {
+  background: var(--accent-orange);
+  border: none;
+  border-radius: 8px;
+  color: #fff;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: filter 0.15s ease;
+}
+.office-chat-send:hover {
+  filter: brightness(1.15);
+}
+
+.office-agent-pool {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px;
+}
+
+.office-pool-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 2px;
+}
+
+.office-pool-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+}
+
+.office-pool-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.office-pool-agent {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  cursor: grab;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  transition: all 0.15s ease;
+  position: relative;
+}
+
+.office-pool-agent:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--border-light);
+}
+
+.office-pool-agent.seated {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.office-pool-agent.dragging {
+  opacity: 0.3;
+  transform: scale(0.95);
+}
+
+.office-pool-avatar {
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  border-radius: 50%;
+  border: 2px solid;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.office-pool-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.office-pool-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.office-pool-status {
+  font-size: 10px;
+}
+
+.office-pool-seated-badge {
+  font-size: 9px;
+  color: var(--accent-green);
+  background: var(--accent-green)15;
+  padding: 2px 6px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 600;
+}
+
+.office-pool-empty {
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: center;
+  padding: 20px 0;
+}
+
+/* ── Chat Panel (inside drawer) ───────────────────────────────────── */
+
+.office-chat-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.office-chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+}
+
+.office-chat-empty {
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: center;
+  padding: 30px 0;
+}
+
+.office-chat-bubble {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.office-chat-avatar {
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  border-radius: 50%;
+  border: 2px solid;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.office-chat-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.office-chat-sender {
+  font-size: 11px;
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.office-chat-text {
+  font-size: 12px;
+  color: var(--text-primary);
+  line-height: 1.4;
+  background: var(--bg-surface);
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+
+.office-chat-loading {
+  text-align: center;
+  padding: 8px 0;
+}
+
+.office-typing {
+  font-size: 12px;
+  color: var(--accent-orange);
+  animation: office-pulse 1.5s infinite;
+}
+
+@keyframes office-pulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+
+/* ── Plan Editor ─────────────────────────────────────────────────── */
+
+.office-editor {
+  position: absolute;
+  top: 50px;
+  left: 14px;
+  width: 340px;
+  max-height: calc(100% - 70px);
+  overflow-y: auto;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+  z-index: 50;
+  box-shadow: var(--shadow-lg);
+}
+
+.office-editor-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.office-editor-header h3 {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.office-editor-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.office-editor-field label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+}
+
+.office-editor-seats {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+.office-editor-seat-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.office-editor-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* ── Buttons ─────────────────────────────────────────────────────── */
+
+.btn-accent {
+  background: var(--accent-orange);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.15s ease;
+}
+
+.btn-accent:hover {
+  filter: brightness(1.1);
+}
+
+.btn-danger {
+  background: var(--accent-red);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-danger:hover {
+  filter: brightness(1.1);
+}
+
+.btn-outline {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.15s ease;
+}
+
+.btn-outline:hover {
+  border-color: var(--accent-orange);
+  color: var(--accent-orange);
+}
+
+.btn-sm {
+  padding: 4px 10px;
+  font-size: 11px;
+}
+
+.input {
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-primary);
+  padding: 6px 10px;
+  font-size: 13px;
+  width: 100%;
+}
+
+.input:focus {
+  border-color: var(--border-focus);
+  outline: none;
+}
+
+.input-sm {
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+/* ═══ Settings Page ════════════════════════════════════════════════ */
+
+.settings-page {
+  padding: 24px;
+  max-width: 680px;
+  margin: 0 auto;
+}
+
+.settings-section {
+  margin-top: 28px;
+}
+
+.settings-section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 12px;
+}
+
+.settings-card {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.settings-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.settings-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.settings-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.4;
+  margin-bottom: 4px;
+}
+
+.settings-input-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.settings-key-input {
+  flex: 1;
+  font-family: monospace;
+  font-size: 13px;
+  letter-spacing: 0.5px;
+}
+
+.settings-key-preview {
+  font-size: 11px;
+  color: var(--accent-green);
+  margin-top: 4px;
+}
+.settings-key-preview code {
+  background: var(--bg-surface);
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 11px;
+}
+
+.settings-model-select {
+  max-width: 280px;
+}
+
+.settings-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-top: 4px;
+}
+
+.settings-status {
+  font-size: 12px;
+  font-weight: 500;
+}
+.settings-status-ok {
+  color: var(--accent-green);
+}
+.settings-status-err {
+  color: var(--accent-red);
 }

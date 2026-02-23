@@ -50,7 +50,7 @@ function pickRandomName(exclude: Set<string> = new Set()): string {
 
 interface FeedEvent {
   id: string;
-  type: "agent" | "plan" | "task" | "system" | "error" | "pipeline";
+  type: "agent" | "plan" | "task" | "system" | "error" | "pipeline" | "office";
   title: string;
   detail: string;
   body?: string;
@@ -481,6 +481,11 @@ export class MissionControlServer {
     // ── Static files ─────────────────────────────────────────────
     if (method === "GET" && (url === "/" || url.startsWith("/public/"))) {
       return this.serveStatic(req, res, url);
+    }
+
+    // ── Serve floor plan images from media/floorplans/ ───────────
+    if (method === "GET" && url.startsWith("/media/floorplans/")) {
+      return this.serveFloorplanFile(res, url);
     }
 
     // ── SSE stream ───────────────────────────────────────────────
@@ -1438,8 +1443,610 @@ export class MissionControlServer {
       }
     }
 
+    // ── Settings ─────────────────────────────────────────────────
+
+    if (method === "GET" && url === "/api/settings") {
+      try {
+        const settingsPath = path.join(this.root, "userdata", "config", "settings.json");
+        const raw = await fs.readFile(settingsPath, "utf-8");
+        const data = JSON.parse(raw);
+        // Mask key in response — send first 7 + last 4 chars
+        const masked = data.openaiKey
+          ? data.openaiKey.slice(0, 7) + "..." + data.openaiKey.slice(-4)
+          : "";
+        return this.json(res, {
+          openaiKey: masked,
+          openaiKeySet: !!data.openaiKey,
+          conversationModel: data.conversationModel || "gpt-4o-mini",
+        });
+      } catch {
+        return this.json(res, { openaiKey: "", openaiKeySet: false, conversationModel: "gpt-4o-mini" });
+      }
+    }
+
+    if (method === "POST" && url === "/api/settings") {
+      try {
+        const body = JSON.parse(await this.readBody(req));
+        const settingsPath = path.join(this.root, "userdata", "config", "settings.json");
+
+        // Load existing settings and merge
+        let existing: Record<string, any> = {};
+        try {
+          existing = JSON.parse(await fs.readFile(settingsPath, "utf-8"));
+        } catch { /* new file */ }
+
+        // Only update key if a real value was sent (not masked)
+        if (body.openaiKey !== undefined && !body.openaiKey.includes("...")) {
+          existing.openaiKey = body.openaiKey;
+        }
+        if (body.conversationModel) {
+          existing.conversationModel = body.conversationModel;
+        }
+
+        await fs.writeFile(settingsPath, JSON.stringify(existing, null, 2), "utf-8");
+        return this.json(res, { ok: true });
+      } catch (err: any) {
+        return this.json(res, { error: err.message }, 500);
+      }
+    }
+
+    // ── Office Chat ──────────────────────────────────────────────
+
+    if (method === "POST" && url === "/api/office/chat") {
+      try {
+        const body = JSON.parse(await this.readBody(req));
+        const agentNames: string[] = body.agents || [];
+        if (agentNames.length < 2) {
+          return this.json(res, { error: "Need at least 2 agents" }, 400);
+        }
+
+        // Read each agent's SOUL.md for personality context
+        const agentSouls: Record<string, string> = {};
+        for (const name of agentNames) {
+          try {
+            const soulPath = path.join(this.root, "userdata", "agents", name, "SOUL.md");
+            agentSouls[name] = await fs.readFile(soulPath, "utf-8");
+          } catch {
+            agentSouls[name] = `Agent ${name} — a helpful assistant.`;
+          }
+        }
+
+        // Build a fun simulated office chat based on SOUL.md personalities
+        const messages = this.generateOfficeChat(agentNames, agentSouls);
+
+        this.pushFeed({
+          type: "office",
+          title: "Office chat started",
+          detail: `${agentNames.join(", ")} had a chat`,
+        });
+
+        return this.json(res, { ok: true, messages });
+      } catch (err: any) {
+        return this.json(res, { error: err.message }, 500);
+      }
+    }
+
+    // ── Office Converse (OpenAI → OpenClaw → simulated fallback) ───
+
+    if (method === "POST" && url === "/api/office/converse") {
+      try {
+        const body = JSON.parse(await this.readBody(req));
+        const agentNames: string[] = body.agents || [];
+        if (agentNames.length < 2) {
+          return this.json(res, { error: "Need at least 2 agents" }, 400);
+        }
+
+        // Resolve display names + emojis from gateway config
+        const configIdentities = await this.loadConfigIdentities();
+        const displayNames: Record<string, string> = {};
+        const agentSouls: Record<string, string> = {};
+        const agentEmojis: Record<string, string> = {};
+        for (const name of agentNames) {
+          const ci = configIdentities.get(name);
+          displayNames[name] = ci?.name || name;
+          agentEmojis[name] = ci?.emoji || displayNames[name].slice(0, 1).toUpperCase();
+          try {
+            const soulPath = path.join(this.root, "userdata", "agents", name, "SOUL.md");
+            agentSouls[name] = await fs.readFile(soulPath, "utf-8");
+          } catch {
+            agentSouls[name] = `Agent ${displayNames[name]} — a helpful assistant.`;
+          }
+        }
+
+        const conversationTopic = this.pickConversationTopic();
+        const messages: Array<{ from: string; emoji: string; text: string; timestamp: string }> = [];
+        const now = Date.now();
+        let t = 0;
+
+        // Check if OpenAI key is configured
+        let openaiKey = "";
+        let openaiModel = "gpt-4o-mini";
+        try {
+          const settingsPath = path.join(this.root, "userdata", "config", "settings.json");
+          const settingsRaw = JSON.parse(await fs.readFile(settingsPath, "utf-8"));
+          openaiKey = settingsRaw.openaiKey || "";
+          openaiModel = settingsRaw.conversationModel || "gpt-4o-mini";
+        } catch { /* no settings file */ }
+
+        if (openaiKey) {
+          // ── Strategy A: Direct OpenAI API calls ──────────────────
+          try {
+            const systemPrompt = [
+              `You are simulating a fun, casual office conversation between AI agents.`,
+              `The agents are: ${agentNames.map(n => displayNames[n]).join(", ")}.`,
+              `Topic: ${conversationTopic}.`,
+              ``,
+              `Agent personalities:`,
+              ...agentNames.map(n => `- ${displayNames[n]}: ${agentSouls[n].slice(0, 300)}`),
+              ``,
+              `Generate a short, natural office conversation (${Math.min(agentNames.length * 2, 6)} messages).`,
+              `Each message should be 1-2 sentences, casual and fun. Agents should stay in character.`,
+              ``,
+              `Reply ONLY with a JSON array of objects like:`,
+              `[{"from":"agentName","text":"message text"}]`,
+              `No markdown, no code fences, no extra text.`,
+            ].join("\n");
+
+            const openaiRes = await new Promise<string>((resolve, reject) => {
+              const postData = JSON.stringify({
+                model: openaiModel,
+                messages: [
+                  { role: "system", content: systemPrompt },
+                  { role: "user", content: `Start the conversation about: ${conversationTopic}` },
+                ],
+                temperature: 0.9,
+                max_tokens: 800,
+              });
+
+              const options = {
+                hostname: "api.openai.com",
+                port: 443,
+                path: "/v1/chat/completions",
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  "Authorization": `Bearer ${openaiKey}`,
+                  "Content-Length": Buffer.byteLength(postData),
+                },
+              };
+
+              const https = require("https") as typeof import("https");
+              const apiReq = https.request(options, (apiRes) => {
+                let data = "";
+                apiRes.on("data", (chunk: string) => { data += chunk; });
+                apiRes.on("end", () => {
+                  if (apiRes.statusCode === 200) resolve(data);
+                  else reject(new Error(`OpenAI API ${apiRes.statusCode}: ${data.slice(0, 200)}`));
+                });
+              });
+              apiReq.on("error", reject);
+              apiReq.setTimeout(30000, () => { apiReq.destroy(); reject(new Error("OpenAI timeout")); });
+              apiReq.write(postData);
+              apiReq.end();
+            });
+
+            const parsed = JSON.parse(openaiRes);
+            const content = parsed.choices?.[0]?.message?.content || "";
+            // Parse the JSON array from the response
+            const jsonMatch = content.match(/\[[\s\S]*\]/);
+            if (jsonMatch) {
+              const chatArr = JSON.parse(jsonMatch[0]);
+              for (const item of chatArr) {
+                // Match by raw ID or display name
+                const name = agentNames.find(n => n.toLowerCase() === (item.from || "").toLowerCase()
+                  || displayNames[n].toLowerCase() === (item.from || "").toLowerCase()) || item.from;
+                const dName = displayNames[name] || name;
+                if (name && item.text) {
+                  messages.push({
+                    from: dName,
+                    emoji: agentEmojis[name] || dName.slice(0, 1).toUpperCase(),
+                    text: item.text,
+                    timestamp: new Date(now + t++ * 3000).toISOString(),
+                  });
+                }
+              }
+            }
+
+            if (messages.length > 0) {
+              this.pushFeed({
+                type: "office",
+                title: "Office conversation (OpenAI)",
+                detail: `${agentNames.join(", ")} conversed via ${openaiModel}`,
+              });
+              return this.json(res, { ok: true, messages, provider: "openai" });
+            }
+          } catch (err: any) {
+            // OpenAI failed — fall through to gateway/simulated
+            console.error("[Office] OpenAI failed, falling back:", err.message);
+          }
+        }
+
+        // ── Strategy B: OpenClaw gateway CLI ─────────────────────
+        const otherDisplayNames = (name: string) => agentNames.filter(n => n !== name).map(n => displayNames[n]);
+        let gatewayWorked = false;
+
+        for (let round = 0; round < Math.min(agentNames.length, 3); round++) {
+          const name = agentNames[round % agentNames.length];
+          const dName = displayNames[name];
+          const colleagues = otherDisplayNames(name).join(", ");
+          const previousContext = messages.length
+            ? messages.map(m => `${m.from}: ${m.text}`).join("\n")
+            : "(conversation just started)";
+
+          const prompt = [
+            `You're in a virtual office with your colleagues: ${colleagues}.`,
+            `The topic of conversation is: ${conversationTopic}.`,
+            `Here's what's been said so far:\n${previousContext}`,
+            ``,
+            `Reply in character as ${dName}. Keep it brief (1-2 sentences), casual, and fun.`,
+            `Just respond with your message — no prefix, no quotes, no roleplay formatting.`,
+          ].join("\n");
+
+          try {
+            const agentId = await this.resolveAgentId(name);
+            const sessionId = `office-${Date.now()}`;
+            const raw = await new Promise<string>((resolve, reject) => {
+              execFile(
+                "openclaw",
+                ["agent", "--message", prompt, "--agent", agentId, "--session-id", sessionId, "--json"],
+                { timeout: 60000, maxBuffer: 2 * 1024 * 1024 },
+                (err, stdout, stderr) => {
+                  if (err) return reject(new Error(stderr?.trim() || err.message));
+                  resolve(stdout || "");
+                }
+              );
+            });
+
+            let responseText = "";
+            try {
+              // Try parsing the entire output as a single JSON object first
+              try {
+                const whole = JSON.parse(raw.trim());
+                responseText = this.extractTextFromOpenClawResponse(whole);
+              } catch { /* not a single JSON object */ }
+
+              // If that didn't work, try line-by-line (newline-delimited JSON)
+              if (!responseText) {
+                const lines = raw.split("\n").filter(l => l.trim());
+                for (const line of lines.reverse()) {
+                  try {
+                    const parsed = JSON.parse(line);
+                    responseText = this.extractTextFromOpenClawResponse(parsed);
+                    if (responseText) break;
+                  } catch { /* skip line */ }
+                }
+              }
+
+              // Last resort: strip anything that looks like JSON and take plain text
+              if (!responseText) {
+                const plain = raw.replace(/\{[\s\S]*\}/g, "").trim();
+                if (plain) responseText = plain.slice(0, 300);
+              }
+            } catch { /* ignore */ }
+
+            messages.push({
+              from: dName,
+              emoji: agentEmojis[name],
+              text: responseText || `*${dName} waved but said nothing*`,
+              timestamp: new Date(now + t++ * 3000).toISOString(),
+            });
+            gatewayWorked = true;
+          } catch {
+            // Agent failed — skip this agent in gateway mode
+          }
+        }
+
+        if (gatewayWorked && messages.length > 0) {
+          this.pushFeed({
+            type: "office",
+            title: "Office conversation",
+            detail: `${agentNames.join(", ")} conversed via gateway`,
+          });
+          return this.json(res, { ok: true, messages, provider: "gateway" });
+        }
+
+        // ── Strategy C: Simulated fallback ───────────────────────
+        const simMessages = this.generateOfficeChat(agentNames, agentSouls);
+        this.pushFeed({
+          type: "office",
+          title: "Office chat (simulated)",
+          detail: `${agentNames.join(", ")} had a simulated chat`,
+        });
+        return this.json(res, { ok: true, messages: simMessages, provider: "simulated" });
+      } catch (err: any) {
+        return this.json(res, { error: err.message }, 500);
+      }
+    }
+
+    // ── Office Floor Plan Config (file-based) ─────────────────────
+
+    if (method === "GET" && url === "/api/office/floorplans") {
+      try {
+        const configPath = path.join(this.root, "media", "floorplans", "office-config.json");
+        const raw = await fs.readFile(configPath, "utf-8");
+        const config = JSON.parse(raw);
+        return this.json(res, config);
+      } catch {
+        // Return empty default if no config exists yet
+        return this.json(res, { plans: [], activePlanId: "", assignments: {} });
+      }
+    }
+
+    if (method === "POST" && url === "/api/office/floorplans") {
+      try {
+        const body = JSON.parse(await this.readBody(req));
+        const configPath = path.join(this.root, "media", "floorplans", "office-config.json");
+        await fs.writeFile(configPath, JSON.stringify(body, null, 2), "utf-8");
+        return this.json(res, { ok: true });
+      } catch (err: any) {
+        return this.json(res, { error: err.message }, 500);
+      }
+    }
+
+    // List available floor plan images in media/floorplans/
+    if (method === "GET" && url === "/api/office/floorplan-images") {
+      try {
+        const dir = path.join(this.root, "media", "floorplans");
+        const files = await fs.readdir(dir);
+        const images = files.filter(f => /\.(png|jpg|jpeg|webp|svg)$/i.test(f));
+        return this.json(res, { images: images.map(f => `/media/floorplans/${f}`) });
+      } catch {
+        return this.json(res, { images: [] });
+      }
+    }
+
+    // ── Office User Chat (user message → agent reply via gateway) ──
+
+    if (method === "POST" && url === "/api/office/userchat") {
+      try {
+        const body = JSON.parse(await this.readBody(req));
+        const { message, agents } = body;
+        if (!message) return this.json(res, { error: "message is required" }, 400);
+        const agentNames: string[] = agents || [];
+        if (!agentNames.length) return this.json(res, { error: "No agents specified" }, 400);
+
+        // Resolve display name
+        const configIdentities = await this.loadConfigIdentities();
+        const name = agentNames[0];
+        const ci = configIdentities.get(name);
+        const dName = ci?.name || name;
+        const prompt = [
+          `A user in the office just said: "${message}"`,
+          `Respond naturally as ${dName}. Keep it brief (1-3 sentences). Be helpful and in-character.`,
+        ].join("\n");
+
+        let replyText = "";
+
+        // Try gateway CLI
+        try {
+          const agentId = await this.resolveAgentId(name);
+          const sessionId = `office-user-${Date.now()}`;
+          const raw = await new Promise<string>((resolve, reject) => {
+            execFile(
+              "openclaw",
+              ["agent", "--message", prompt, "--agent", agentId, "--session-id", sessionId, "--json"],
+              { timeout: 60000, maxBuffer: 2 * 1024 * 1024 },
+              (err, stdout, stderr) => {
+                if (err) return reject(new Error(stderr?.trim() || err.message));
+                resolve(stdout || "");
+              }
+            );
+          });
+
+          // Parse response (same logic as converse)
+          try {
+            const whole = JSON.parse(raw.trim());
+            replyText = this.extractTextFromOpenClawResponse(whole);
+          } catch { /* not a single JSON object */ }
+          if (!replyText) {
+            const lines = raw.split("\n").filter(l => l.trim());
+            for (const line of lines.reverse()) {
+              try {
+                const parsed = JSON.parse(line);
+                replyText = this.extractTextFromOpenClawResponse(parsed);
+                if (replyText) break;
+              } catch { /* skip line */ }
+            }
+          }
+          if (!replyText) {
+            const plain = raw.replace(/\{[\s\S]*\}/g, "").trim();
+            if (plain) replyText = plain.slice(0, 500);
+          }
+        } catch {
+          // Gateway failed — simulated reply
+        }
+
+        if (!replyText) {
+          // Simple fallback
+          const fallbacks = [
+            `Hmm, interesting thought! Let me think about that.`,
+            `Good point! I'll look into it.`,
+            `That's a great question — let me check.`,
+            `On it! I'll get back to you shortly.`,
+          ];
+          replyText = fallbacks[Math.floor(Math.random() * fallbacks.length)];
+        }
+
+        const emoji = ci?.emoji || dName.slice(0, 1).toUpperCase();
+
+        this.pushFeed({
+          type: "office",
+          title: "Office user chat",
+          detail: `User chatted with ${dName}`,
+        });
+
+        return this.json(res, { ok: true, agent: dName, agentId: name, emoji, reply: replyText });
+      } catch (err: any) {
+        return this.json(res, { error: err.message }, 500);
+      }
+    }
+
     // 404
     this.json(res, { error: "Not Found", path: url }, 404);
+  }
+
+  // ── Office Chat Generator ───────────────────────────────────────
+
+  /** Extract clean text from various OpenClaw CLI JSON response shapes. */
+  private extractTextFromOpenClawResponse(obj: any): string {
+    // Shape: { result: { payloads: [{ text: "..." }] } }
+    if (obj?.result?.payloads) {
+      const texts = obj.result.payloads
+        .filter((p: any) => p.text)
+        .map((p: any) => p.text);
+      if (texts.length) return texts.join("\n");
+    }
+    // Shape: { result: { text: "..." } }
+    if (obj?.result?.text) return obj.result.text;
+    // Shape: { result: { output: "..." } }
+    if (obj?.result?.output) return obj.result.output;
+    // Shape: { text: "..." }
+    if (obj?.text && typeof obj.text === "string") return obj.text;
+    // Shape: { output: "..." }
+    if (obj?.output && typeof obj.output === "string") return obj.output;
+    // Shape: { message: "..." }  (some CLI versions)
+    if (obj?.message && typeof obj.message === "string" && !obj.error) return obj.message;
+    // Shape: { content: "..." }
+    if (obj?.content && typeof obj.content === "string") return obj.content;
+    // Shape: { choices: [{ message: { content: "..." } }] } (pass-through from LLM)
+    if (obj?.choices?.[0]?.message?.content) return obj.choices[0].message.content;
+    return "";
+  }
+
+  private pickConversationTopic(): string {
+    const topics = [
+      "what everyone's working on today",
+      "the best way to debug a tricky data pipeline",
+      "whether tabs or spaces are better",
+      "the office coffee machine being broken again",
+      "planning the next team standup",
+      "a mysterious bug that appeared overnight",
+      "ideas for automating boring tasks",
+      "the best snacks for a coding marathon",
+      "whether AI agents deserve weekends off",
+      "the optimal desk layout for productivity",
+      "a fun team building activity idea",
+      "who left crumbs in the server room",
+    ];
+    return topics[Math.floor(Math.random() * topics.length)];
+  }
+
+  private generateOfficeChat(
+    agentNames: string[],
+    agentSouls: Record<string, string>,
+  ): Array<{ from: string; emoji: string; text: string; timestamp: string }> {
+    // Extract personality hints from SOUL.md
+    const vibes: Record<string, string> = {};
+    const emojis: Record<string, string> = {};
+    for (const name of agentNames) {
+      const soul = agentSouls[name] || "";
+      // Try to extract vibe section
+      const vibeMatch = soul.match(/## Vibe\s*\n+([\s\S]*?)(?=\n##|\n---|\s*$)/i);
+      vibes[name] = vibeMatch ? vibeMatch[1].trim() : "friendly and helpful";
+
+      // Try to extract emoji from identity
+      const emojiMatch = soul.match(/emoji[:\s]+(\S+)/i);
+      emojis[name] = emojiMatch ? emojiMatch[1] : name.slice(0, 1).toUpperCase();
+    }
+
+    // Fun office conversation topics
+    const topics = [
+      "what everyone's working on today",
+      "the best way to debug a tricky data pipeline",
+      "whether tabs or spaces are better",
+      "the office coffee machine being broken again",
+      "planning the next team standup",
+      "a mysterious bug that appeared overnight",
+      "ideas for automating boring tasks",
+      "the best snacks for a coding marathon",
+      "whether AI agents deserve weekends off",
+      "the optimal desk layout for productivity",
+      "a fun team building activity idea",
+      "who left crumbs in the server room",
+    ];
+    const topic = topics[Math.floor(Math.random() * topics.length)];
+
+    // Generate fun conversational messages
+    const greetings = [
+      "Hey everyone! ☕",
+      "Morning team!",
+      "What's the vibe today?",
+      "Alright, let's chat!",
+      "*stretches* Ready for the day!",
+      "Who's got updates?",
+    ];
+    const reactions = [
+      "Ha, good one!",
+      "Totally agree.",
+      "Hmm, interesting take...",
+      "I was just thinking the same thing!",
+      "Let me think about that...",
+      "Honestly? Fair point.",
+      "I have thoughts on this 👀",
+      "Classic.",
+    ];
+    const topicStarters = [
+      `So... can we talk about ${topic}?`,
+      `Real talk — ${topic}.`,
+      `I've been thinking about ${topic}.`,
+      `Hot take: ${topic} is underrated.`,
+      `Can we discuss ${topic} for a sec?`,
+    ];
+    const opinions = [
+      `Based on my experience, I think the key is keeping it simple.`,
+      `I'd approach it differently — always start with the data.`,
+      `The pragmatic move is to just ship it and iterate.`,
+      `Has anyone considered we might be overthinking this?`,
+      `I read something interesting about this in my SOUL.md...`,
+      `My instinct says we should experiment first.`,
+      `I'm biased but I think automation is always the answer.`,
+      `Let's not bikeshed — what's the MVP here?`,
+    ];
+    const closers = [
+      "Alright, back to work! 🦞",
+      "Good chat, team!",
+      "This was fun — same time tomorrow?",
+      "OK I need more coffee first ☕",
+      "*cracks knuckles* Time to code.",
+      "Let's circle back after lunch.",
+    ];
+
+    const pick = (arr: string[]) => arr[Math.floor(Math.random() * arr.length)];
+    const shuffle = <T>(a: T[]): T[] => [...a].sort(() => Math.random() - 0.5);
+
+    const msgs: Array<{ from: string; emoji: string; text: string; timestamp: string }> = [];
+    const now = Date.now();
+    let t = 0;
+
+    const shuffled = shuffle(agentNames);
+
+    // Opening
+    msgs.push({ from: shuffled[0], emoji: emojis[shuffled[0]], text: pick(greetings), timestamp: new Date(now + t++ * 2000).toISOString() });
+
+    // Another agent responds
+    if (shuffled.length > 1) {
+      msgs.push({ from: shuffled[1], emoji: emojis[shuffled[1]], text: pick(greetings), timestamp: new Date(now + t++ * 2000).toISOString() });
+    }
+
+    // Topic starter
+    const starter = pick(shuffle(agentNames));
+    msgs.push({ from: starter, emoji: emojis[starter], text: pick(topicStarters), timestamp: new Date(now + t++ * 2000).toISOString() });
+
+    // Opinions from different agents
+    for (const name of shuffle(agentNames).slice(0, Math.min(3, agentNames.length))) {
+      msgs.push({ from: name, emoji: emojis[name], text: pick(opinions), timestamp: new Date(now + t++ * 2000).toISOString() });
+    }
+
+    // Reactions
+    for (const name of shuffle(agentNames).slice(0, 2)) {
+      msgs.push({ from: name, emoji: emojis[name], text: pick(reactions), timestamp: new Date(now + t++ * 2000).toISOString() });
+    }
+
+    // Closer
+    const closer = pick(shuffle(agentNames));
+    msgs.push({ from: closer, emoji: emojis[closer], text: pick(closers), timestamp: new Date(now + t++ * 2000).toISOString() });
+
+    return msgs;
   }
 
   // ── OpenClaw CLI runner ─────────────────────────────────────────
@@ -2073,13 +2680,50 @@ _No tasks assigned yet. Tasks will appear here when dispatched._
       ".ico": "image/x-icon",
     };
 
+    const binaryExts = new Set(['.png', '.ico', '.jpg', '.jpeg', '.gif', '.webp', '.woff', '.woff2', '.ttf']);
+
     try {
-      const content = await fs.readFile(filePath, "utf-8");
+      const isBinary = binaryExts.has(ext);
+      const content = await fs.readFile(filePath, isBinary ? undefined : "utf-8");
       res.writeHead(200, {
         "Content-Type": mimeTypes[ext] || "text/plain",
         "Cache-Control": "no-cache, no-store, must-revalidate",
         "Pragma": "no-cache",
         "Expires": "0",
+      });
+      res.end(content);
+    } catch {
+      res.writeHead(404, { "Content-Type": "text/plain" });
+      res.end("Not Found");
+    }
+  }
+
+  /** Serve floor plan images from media/floorplans/ */
+  private async serveFloorplanFile(
+    res: http.ServerResponse,
+    url: string
+  ): Promise<void> {
+    const filename = url.replace("/media/floorplans/", "");
+    // Prevent path traversal
+    if (filename.includes("..") || filename.includes("/")) {
+      res.writeHead(403, { "Content-Type": "text/plain" });
+      res.end("Forbidden");
+      return;
+    }
+    const filePath = path.join(this.root, "media", "floorplans", filename);
+    const ext = path.extname(filePath);
+    const mimeTypes: Record<string, string> = {
+      ".png": "image/png",
+      ".jpg": "image/jpeg",
+      ".jpeg": "image/jpeg",
+      ".webp": "image/webp",
+      ".svg": "image/svg+xml",
+    };
+    try {
+      const content = await fs.readFile(filePath);
+      res.writeHead(200, {
+        "Content-Type": mimeTypes[ext] || "application/octet-stream",
+        "Cache-Control": "public, max-age=3600",
       });
       res.end(content);
     } catch {

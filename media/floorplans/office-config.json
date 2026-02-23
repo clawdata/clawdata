@@ -1,0 +1,154 @@
+{
+  "plans": [
+    {
+      "id": "regular-office",
+      "name": "Regular Office",
+      "image": "/media/floorplans/regularoffice.png",
+      "seats": [
+        {
+          "id": "s1",
+          "x": 20,
+          "y": 20,
+          "label": "Desk A1"
+        },
+        {
+          "id": "s2",
+          "x": 46,
+          "y": 18,
+          "label": "Desk A2"
+        },
+        {
+          "id": "s3",
+          "x": 80,
+          "y": 20,
+          "label": "Desk A3"
+        },
+        {
+          "id": "s4",
+          "x": 20,
+          "y": 52,
+          "label": "Desk B1"
+        },
+        {
+          "id": "s5",
+          "x": 46,
+          "y": 52,
+          "label": "Desk B2"
+        },
+        {
+          "id": "s6",
+          "x": 80,
+          "y": 52,
+          "label": "Desk B3"
+        },
+        {
+          "id": "s7",
+          "x": 48,
+          "y": 88,
+          "label": "Lounge"
+        }
+      ]
+    },
+    {
+      "id": "lair-office",
+      "name": "Lair Office",
+      "image": "/media/floorplans/lairoffice.png",
+      "seats": [
+        {
+          "id": "s1",
+          "x": 55,
+          "y": 25,
+          "label": "Command"
+        },
+        {
+          "id": "s2",
+          "x": 25,
+          "y": 35,
+          "label": "Left Wing"
+        },
+        {
+          "id": "s3",
+          "x": 60,
+          "y": 50,
+          "label": "Right Wing"
+        },
+        {
+          "id": "s4",
+          "x": 25,
+          "y": 70,
+          "label": "Station 1"
+        },
+        {
+          "id": "s5",
+          "x": 50,
+          "y": 65,
+          "label": "Station 2"
+        },
+        {
+          "id": "s6",
+          "x": 75,
+          "y": 70,
+          "label": "Station 3"
+        }
+      ]
+    },
+    {
+      "id": "scifi-office",
+      "name": "Sci-Fi Office",
+      "image": "/media/floorplans/scifioffice.png",
+      "seats": [
+        {
+          "id": "s1",
+          "x": 50,
+          "y": 25,
+          "label": "Bridge"
+        },
+        {
+          "id": "s2",
+          "x": 30,
+          "y": 35,
+          "label": "Ops Left"
+        },
+        {
+          "id": "s3",
+          "x": 65,
+          "y": 55,
+          "label": "Ops Right"
+        },
+        {
+          "id": "s4",
+          "x": 25,
+          "y": 70,
+          "label": "Bay 1"
+        },
+        {
+          "id": "s5",
+          "x": 50,
+          "y": 65,
+          "label": "Bay 2"
+        },
+        {
+          "id": "s6",
+          "x": 75,
+          "y": 75,
+          "label": "Bay 3"
+        }
+      ]
+    }
+  ],
+  "activePlanId": "lair-office",
+  "assignments": {
+    "regular-office": {
+      "s6": "main",
+      "s5": "harry"
+    },
+    "lair-office": {
+      "s1": "main",
+      "s5": "harry"
+    },
+    "scifi-office": {
+      "s2": "main",
+      "s5": "harry"
+    }
+  }
+}
