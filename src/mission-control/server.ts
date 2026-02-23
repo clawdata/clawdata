@@ -621,9 +621,23 @@ export class MissionControlServer {
         }
       }
 
+      // Derive effective gateway status — if the GatewayClient says "disconnected"
+      // but we successfully ran CLI commands and health looks ok, report "connected".
+      let effectiveGatewayStatus = this.gateway.status;
+      if (effectiveGatewayStatus !== "connected" && cfgList.length > 0) {
+        // CLI worked → gateway is reachable, GatewayClient just hasn't caught up yet
+        if (gwHealth?.ok) {
+          effectiveGatewayStatus = "connected";
+          // Nudge the GatewayClient to reconnect
+          if (this.gateway.status === "disconnected") {
+            this.gateway.connect().catch(() => {});
+          }
+        }
+      }
+
       return this.json(res, {
         project: this.projectName,
-        gateway: this.gateway.status,
+        gateway: effectiveGatewayStatus,
         gatewayHealth: gwHealth ? {
           ok: gwHealth.ok,
           heartbeatSeconds: gwHealth.heartbeatSeconds,
@@ -1078,8 +1092,13 @@ export class MissionControlServer {
         const skillsList = Array.isArray(skills) ? skills : [];
         await this.writeAgentSkills(name, skillsList);
 
-        // Restart gateway so the new per-agent skill config takes effect
-        try { await this.runOpenClawCommand(["gateway", "restart"]); } catch { /* best-effort */ }
+        // Restart gateway so the new per-agent skill config takes effect.
+        // Add a brief stabilization delay so subsequent config fetches
+        // don't hit the gateway mid-restart.
+        try {
+          await this.runOpenClawCommand(["gateway", "restart"]);
+          await new Promise(r => setTimeout(r, 1500));
+        } catch { /* best-effort */ }
 
         this.pushFeed({
           type: "agent",
@@ -1096,10 +1115,29 @@ export class MissionControlServer {
     // Agent config — full config data from openclaw agents list (with bindings)
     if (method === "GET" && url === "/api/agents/config") {
       try {
-        const agents = await this.runOpenClawCommand(["agents", "list", "--json", "--bindings"]);
-        const agentList = Array.isArray(agents) ? agents : [];
+        let agentList: any[] = [];
 
-        // Enrich with identity from raw openclaw.json (gateway is source of truth for names)
+        // Try CLI first (richest data), fall back to config file if gateway is restarting
+        try {
+          const agents = await this.runOpenClawCommand(["agents", "list", "--json", "--bindings"]);
+          agentList = Array.isArray(agents) ? agents : [];
+        } catch {
+          // Gateway might be restarting — build agent list directly from config file
+          try {
+            const homedir = process.env.HOME || process.env.USERPROFILE || "";
+            const configPath = `${homedir}/.openclaw/openclaw.json`;
+            const { readFile } = await import("node:fs/promises");
+            const raw = JSON.parse(await readFile(configPath, "utf-8"));
+            const cfgAgents: any[] = raw?.agents?.list || [];
+            agentList = cfgAgents.map((a: any) => ({
+              id: a.id,
+              name: a.name || a.id,
+              isDefault: a.id === (raw?.agents?.default || "main"),
+            }));
+          } catch { /* config file unreadable — return empty */ }
+        }
+
+        // Enrich with identity + skills from raw openclaw.json (gateway is source of truth)
         try {
           const homedir = process.env.HOME || process.env.USERPROFILE || "";
           const configPath = `${homedir}/.openclaw/openclaw.json`;

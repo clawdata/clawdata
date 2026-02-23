@@ -233,15 +233,19 @@ export class GatewayClient extends EventEmitter {
         if (!result.ok && this._status === "connected") {
           this._status = "disconnected";
           this.emit("status", this._status);
+          this.scheduleReconnect();
         } else if (result.ok && this._status !== "connected") {
+          // Gateway recovered — mark connected and restart subsystems
           this._status = "connected";
           this.emit("status", this._status);
+          this.startLogStream();
         }
       }
     } catch {
       if (this._status === "connected") {
         this._status = "disconnected";
         this.emit("status", this._status);
+        this.scheduleReconnect();
       }
     }
   }
@@ -406,25 +410,29 @@ export class GatewayClient extends EventEmitter {
   // ── Polling ────────────────────────────────────────────────────
 
   private startPolling(): void {
+    if (this.pollTimer) {
+      clearTimeout(this.pollTimer);
+      this.pollTimer = null;
+    }
     const poll = async () => {
-      if (this._status !== "connected" && this._status !== "connecting") return;
       try {
         await this.refreshAll();
       } catch {
         // Silent failure
       }
-      if (this._status === "connected") {
-        this.pollTimer = setTimeout(poll, 15000);
-      }
+      // Keep polling regardless of status — refreshAll calls fetchHealth
+      // which handles reconnection when the gateway comes back.
+      this.pollTimer = setTimeout(poll, this._status === "connected" ? 15000 : 10000);
     };
     this.pollTimer = setTimeout(poll, 5000);
   }
 
   private scheduleReconnect(): void {
-    if (this.reconnectTimer) return;
-    this.reconnectTimer = setTimeout(() => {
-      this.reconnectTimer = null;
-      this.connect();
-    }, 15000);
+    // Polling already handles reconnection via fetchHealth().
+    // If polling isn't running yet, start it so it will
+    // pick up the gateway when it comes back.
+    if (!this.pollTimer) {
+      this.startPolling();
+    }
   }
 }

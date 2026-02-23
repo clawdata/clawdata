@@ -5,7 +5,7 @@
 import { state } from "./state.js";
 import { renderSidebarBadges } from "./navbar.js";
 import { fetchDashboard, API } from "./api.js";
-import { appendFeedItemToDOM, renderLogIntoFeed } from "./pages/feed.js";
+import { refreshFeedList } from "./pages/feed.js";
 
 /**
  * Perform a "soft refresh": fetch fresh data from the server.
@@ -37,17 +37,7 @@ export function connectSSE(): void {
       if (state.feed.length > 200) state.feed.length = 200;
       renderSidebarBadges();
 
-      if (state.currentPage === "feed") {
-        const tab = state.activeFeedTab;
-        if (tab === "all" || event.type === tab) {
-          const container = document.getElementById("feedListContainer");
-          if (container) {
-            const empty = container.querySelector(".empty-state");
-            if (empty) empty.remove();
-            appendFeedItemToDOM(container, event, true);
-          }
-        }
-      }
+      if (state.currentPage === "feed") refreshFeedList();
     } catch { /* ignore malformed events */ }
   });
 
@@ -56,7 +46,6 @@ export function connectSSE(): void {
       const entry = JSON.parse(e.data);
       const subsystem = entry.subsystem || "";
       const isAgent = subsystem.startsWith("agent");
-      const isDebug = entry.level === "debug";
 
       // Store log entries as synthetic FeedEvents so they survive tab switches
       const syntheticEvent = {
@@ -72,24 +61,7 @@ export function connectSSE(): void {
       state.feed.unshift(syntheticEvent as any);
       if (state.feed.length > 200) state.feed.length = 200;
 
-      // Skip rendering debug items when hideDebug is on
-      if (isDebug && state.hideDebug) return;
-
-      if (state.currentPage === "feed") {
-        const tab = state.activeFeedTab;
-        const showOnTab = tab === "all"
-          || (tab === "agent" && isAgent)
-          || (tab === "error" && (entry.level === "error" || entry.level === "fatal"))
-          || (tab === "system" && !isAgent);
-        if (showOnTab) {
-          const container = document.getElementById("feedListContainer");
-          if (container) {
-            const empty = container.querySelector(".empty-state");
-            if (empty) empty.remove();
-            renderLogIntoFeed(container, entry);
-          }
-        }
-      }
+      if (state.currentPage === "feed") refreshFeedList();
     } catch { /* ignore */ }
   });
 

@@ -730,6 +730,99 @@
   }
 
   // src/mission-control/client/pages/feed.ts
+  function findAgentForEvent(ev) {
+    const actor = (ev.actor || "").toLowerCase();
+    if (!actor || actor === "system" || actor === "human") return void 0;
+    return state.agents.find((a) => a.name.toLowerCase() === actor || (a.identName || "").toLowerCase() === actor);
+  }
+  function agentIcon(ev, fallback) {
+    const agent = findAgentForEvent(ev);
+    if (agent && agent.identEmoji) return agent.identEmoji;
+    return fallback;
+  }
+  function extractTaskTitle(ev) {
+    const title = ev.title || "";
+    const m = title.match(/^(?:Task (?:created|assigned|dispatched|updated|completed)|Agent completed):\s*(.+)$/i);
+    if (m) return m[1].trim();
+    if (/^Task dispatched to\s+/i.test(title) && ev.detail) {
+      const dm = ev.detail.match(/^"(.+?)"\s+sent to/);
+      if (dm) return dm[1].trim();
+    }
+    return null;
+  }
+  function groupIntoThreads(items) {
+    const threads = [];
+    const taskIndex = /* @__PURE__ */ new Map();
+    const actorIndex = /* @__PURE__ */ new Map();
+    for (const ev of items) {
+      const taskTitle = extractTaskTitle(ev);
+      if (taskTitle) {
+        const key = taskTitle.toLowerCase();
+        const existing = taskIndex.get(key);
+        if (existing) {
+          existing.events.push(ev);
+          existing.count++;
+          continue;
+        }
+        const thread = {
+          key: `task:${key}`,
+          events: [ev],
+          count: 1,
+          threadTitle: taskTitle,
+          threadType: "task"
+        };
+        taskIndex.set(key, thread);
+        threads.push(thread);
+        continue;
+      }
+      if (ev.detail?.includes("responded to task") && ev.actor) {
+        const evTime = new Date(ev.timestamp).getTime();
+        let matched = false;
+        for (const [, t] of taskIndex) {
+          const leadTime = new Date(t.events[0].timestamp).getTime();
+          if (Math.abs(evTime - leadTime) < 10 * 60 * 1e3 && t.events.some((e) => (e.actor || "").toLowerCase() === ev.actor.toLowerCase())) {
+            t.events.push(ev);
+            t.count++;
+            t.events.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+            matched = true;
+            break;
+          }
+        }
+        if (matched) continue;
+      }
+      if (ev.actor && ev.actor !== "system" && ev.actor !== "human") {
+        const actorKey = ev.actor.toLowerCase();
+        const existing = actorIndex.get(actorKey);
+        if (existing) {
+          const oldestInBurst = new Date(existing.events[existing.events.length - 1].timestamp).getTime();
+          const evTime = new Date(ev.timestamp).getTime();
+          if (oldestInBurst - evTime < 5 * 60 * 1e3 && oldestInBurst - evTime >= 0) {
+            existing.events.push(ev);
+            existing.count++;
+            continue;
+          }
+        }
+        const thread = {
+          key: `actor:${actorKey}:${ev.id}`,
+          events: [ev],
+          count: 1,
+          threadTitle: ev.actor,
+          threadType: "actor"
+        };
+        actorIndex.set(actorKey, thread);
+        threads.push(thread);
+        continue;
+      }
+      threads.push({
+        key: `single:${ev.id}`,
+        events: [ev],
+        count: 1,
+        threadTitle: ev.title,
+        threadType: "single"
+      });
+    }
+    return threads;
+  }
   function renderFeedPage() {
     const filteredCount = getFilteredFeed().length;
     setPageContent(`
@@ -765,15 +858,11 @@
         state.activeFeedTab = tab.dataset.feed || "all";
         $("feedTabs")?.querySelectorAll(".feed-tab").forEach((t) => t.classList.remove("active"));
         tab.classList.add("active");
-        const container = $("feedListContainer");
-        if (container) container.innerHTML = renderFeedItems(getFilteredFeed());
-        bindFeedClicks();
+        refreshFeedList();
       });
       $("debugToggle")?.addEventListener("change", () => {
         state.hideDebug = !$("debugToggle").checked;
-        const container = $("feedListContainer");
-        if (container) container.innerHTML = renderFeedItems(getFilteredFeed());
-        bindFeedClicks();
+        refreshFeedList();
       });
       bindFeedClicks();
     });
@@ -808,33 +897,45 @@
     if (!items.length) {
       return '<div class="empty-state"><div class="empty-state-icon">\u{1F4E1}</div><div class="empty-state-text">Waiting for events...</div></div>';
     }
-    return items.map((ev, i) => {
+    const threads = groupIntoThreads(items);
+    return threads.map((thread, ti) => {
+      const ev = thread.events[0];
       const bodyPreview = ev.body ? cleanResponseText(ev.body).slice(0, 140) : "";
+      const defaultIcon = ev.icon ? escHtml(ev.icon) : iconMap[ev.type] || "\u2022";
+      const displayIcon = agentIcon(ev, defaultIcon);
+      const isThread = thread.count > 1;
       return `
-    <div class="feed-item ${i === 0 ? "new" : ""}" data-feed-idx="${i}" style="cursor:pointer">
-      <div class="feed-icon ${ev.type || "system"}">${ev.icon ? escHtml(ev.icon) : iconMap[ev.type] || "\u2022"}</div>
+    <div class="feed-item${ti === 0 ? " new" : ""}${isThread ? " feed-thread-head" : ""}" data-thread-idx="${ti}" style="cursor:pointer">
+      <div class="feed-icon ${ev.type || "system"}">${displayIcon}</div>
       <div class="feed-content">
         <div class="feed-title">${escHtml(ev.title)}</div>
         <div class="feed-detail">${escHtml(ev.detail || "")}</div>
         ${bodyPreview ? `<div class="feed-body-preview">${escHtml(bodyPreview)}${ev.body.length > 140 ? "\u2026" : ""}</div>` : ""}
+        ${isThread ? `<div class="feed-thread-badge"><span class="feed-thread-count">${thread.count}</span> events in thread \u25B8</div>` : ""}
       </div>
       <div class="feed-time">${timeAgo(ev.timestamp)}</div>
     </div>`;
     }).join("");
   }
-  var _lastFilteredFeed = [];
+  var _feedPageItems = [];
   function bindFeedClicks() {
-    _lastFilteredFeed = getFilteredFeed();
+    _feedPageItems = getFilteredFeed();
     const container = $("feedListContainer");
     if (!container) return;
-    container.addEventListener("click", onFeedItemClick);
+    container.addEventListener("click", onFeedPageClick);
   }
-  function onFeedItemClick(e) {
-    const row = e.target.closest(".feed-item[data-feed-idx]");
+  function onFeedPageClick(e) {
+    handleFeedClick(e, _feedPageItems);
+  }
+  function handleFeedClick(e, items) {
+    const row = e.target.closest(".feed-item[data-thread-idx]");
     if (!row) return;
-    const idx = parseInt(row.dataset.feedIdx || "", 10);
-    if (isNaN(idx) || idx < 0 || idx >= _lastFilteredFeed.length) return;
-    showFeedDetailModal(_lastFilteredFeed[idx]);
+    const idx = parseInt(row.dataset.threadIdx || "", 10);
+    const threads = groupIntoThreads(items);
+    if (isNaN(idx) || idx < 0 || idx >= threads.length) return;
+    const thread = threads[idx];
+    if (thread.count > 1) showThreadDetailModal(thread);
+    else showFeedDetailModal(thread.events[0]);
   }
   var typeLabels = {
     system: "System",
@@ -855,7 +956,8 @@
   function showFeedDetailModal(ev) {
     const m = openModal({ maxWidth: "520px" });
     const type = ev.type || "system";
-    const icon = ev.icon || iconMap[type] || "\u2022";
+    const rawIcon = ev.icon || iconMap[type] || "\u2022";
+    const icon = agentIcon(ev, rawIcon);
     const label = typeLabels[type] || type;
     const color = typeBadgeColors[type] || "var(--text-secondary)";
     const actor = ev.actor || "";
@@ -910,42 +1012,79 @@
   `;
     m.body.querySelector(".feed-detail-close")?.addEventListener("click", () => m.close());
   }
-  function renderLogIntoFeed(container, entry) {
-    const levelClass = entry.level === "error" || entry.level === "warn" ? "error" : "";
-    const isDebug = entry.level === "debug";
-    if (isDebug && state.hideDebug) return;
-    const time = entry.time ? new Date(entry.time).toLocaleTimeString("en-US", { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" }) : "";
-    const subsystem = entry.subsystem ? `[${entry.subsystem}]` : "";
-    const div = document.createElement("div");
-    div.className = `feed-item log-item ${levelClass}${isDebug ? " debug-item" : ""}`;
-    div.innerHTML = `
-    <div class="feed-icon ${levelClass ? "error" : "system"}">${entry.level === "error" || entry.level === "warn" ? "\u26A0" : "\u203A"}</div>
-    <div class="feed-content">
-      <div class="feed-title log-msg">${escHtml((entry.message || "").slice(0, 200))}</div>
-      <div class="feed-detail">${escHtml(subsystem)} \xB7 ${escHtml(entry.level || "")}</div>
+  function showThreadDetailModal(thread) {
+    const m = openModal({ maxWidth: "580px" });
+    const lead = thread.events[0];
+    const type = lead.type || "system";
+    const icon = agentIcon(lead, lead.icon || iconMap[type] || "\u2022");
+    const color = typeBadgeColors[type] || "var(--text-secondary)";
+    const label = thread.threadType === "task" ? "Task Thread" : thread.threadType === "actor" ? "Activity" : typeLabels[type] || type;
+    const timeRange = (() => {
+      const newest = new Date(thread.events[0].timestamp).getTime();
+      const oldest = new Date(thread.events[thread.events.length - 1].timestamp).getTime();
+      const diff = newest - oldest;
+      if (diff < 6e4) return "< 1 min";
+      if (diff < 36e5) return `${Math.round(diff / 6e4)} min`;
+      return `${(diff / 36e5).toFixed(1)} hr`;
+    })();
+    m.body.innerHTML = `
+    <div class="feed-detail-modal">
+      <div class="feed-detail-header">
+        <div class="feed-detail-icon ${type}" style="font-size:20px;width:40px;height:40px">${escHtml(icon)}</div>
+        <div style="flex:1;min-width:0">
+          <div class="feed-detail-title">${escHtml(thread.threadTitle)}</div>
+          <div style="display:flex;gap:8px;align-items:center;margin-top:4px;flex-wrap:wrap">
+            <span class="feed-detail-badge" style="--badge-color:${color}">${escHtml(label)}</span>
+            <span class="feed-detail-badge" style="--badge-color:var(--accent-orange)">${thread.count} events</span>
+            <span class="feed-detail-badge" style="--badge-color:var(--text-muted)">span: ${timeRange}</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="feed-thread-timeline">
+        ${thread.events.map((ev, i) => {
+      const evIcon = agentIcon(ev, ev.icon || iconMap[ev.type] || "\u2022");
+      const evColor = typeBadgeColors[ev.type] || "var(--text-secondary)";
+      const evBody = ev.body ? cleanResponseText(ev.body).slice(0, 200) : "";
+      return `
+          <div class="feed-thread-event" data-evt-idx="${i}">
+            <div class="feed-thread-dot" style="background:${evColor}"></div>
+            <div class="feed-thread-event-content">
+              <div class="feed-thread-event-header">
+                <span class="feed-thread-event-icon">${escHtml(evIcon)}</span>
+                <span class="feed-thread-event-title">${escHtml(ev.title)}</span>
+              </div>
+              ${ev.detail ? `<div class="feed-thread-event-detail">${escHtml(ev.detail)}</div>` : ""}
+              ${evBody ? `<div class="feed-thread-event-body">${escHtml(evBody)}${ev.body.length > 200 ? "\u2026" : ""}</div>` : ""}
+              <div class="feed-thread-event-time">${timeAgo(ev.timestamp)}</div>
+            </div>
+          </div>`;
+    }).join("")}
+      </div>
+
+      <div style="text-align:right;margin-top:20px">
+        <button class="btn feed-detail-close" style="min-width:80px">Close</button>
+      </div>
     </div>
-    <div class="feed-time">${time}</div>
   `;
-    if (container.firstChild) container.insertBefore(div, container.firstChild);
-    else container.appendChild(div);
-    while (container.children.length > 200) container.removeChild(container.lastChild);
+    m.body.querySelectorAll(".feed-thread-event").forEach((el) => {
+      el.addEventListener("click", () => {
+        const idx = parseInt(el.dataset.evtIdx || "", 10);
+        if (!isNaN(idx) && idx >= 0 && idx < thread.events.length) {
+          showFeedDetailModal(thread.events[idx]);
+        }
+      });
+    });
+    m.body.querySelector(".feed-detail-close")?.addEventListener("click", () => m.close());
   }
-  function appendFeedItemToDOM(container, ev, prepend) {
-    const bodyPreview = ev.body ? cleanResponseText(ev.body).slice(0, 140) : "";
-    const div = document.createElement("div");
-    div.className = "feed-item new";
-    div.innerHTML = `
-    <div class="feed-icon ${ev.type || "system"}">${iconMap[ev.type] || "\u2022"}</div>
-    <div class="feed-content">
-      <div class="feed-title">${escHtml(ev.title)}</div>
-      <div class="feed-detail">${escHtml(ev.detail || "")}</div>
-      ${bodyPreview ? `<div class="feed-body-preview">${escHtml(bodyPreview)}${ev.body.length > 140 ? "\u2026" : ""}</div>` : ""}
-    </div>
-    <div class="feed-time">${timeAgo(ev.timestamp)}</div>
-  `;
-    if (prepend && container.firstChild) container.insertBefore(div, container.firstChild);
-    else container.appendChild(div);
-    while (container.children.length > 200) container.removeChild(container.lastChild);
+  function refreshFeedList() {
+    const container = $("feedListContainer");
+    if (!container) return;
+    const filtered = getFilteredFeed();
+    container.innerHTML = renderFeedItems(filtered);
+    _feedPageItems = filtered;
+    const subtitle = document.querySelector(".page-subtitle");
+    if (subtitle) subtitle.textContent = `${filtered.length} events`;
   }
 
   // src/mission-control/client/sse.ts
@@ -968,17 +1107,7 @@
         state.feed.unshift(event);
         if (state.feed.length > 200) state.feed.length = 200;
         renderSidebarBadges();
-        if (state.currentPage === "feed") {
-          const tab = state.activeFeedTab;
-          if (tab === "all" || event.type === tab) {
-            const container = document.getElementById("feedListContainer");
-            if (container) {
-              const empty = container.querySelector(".empty-state");
-              if (empty) empty.remove();
-              appendFeedItemToDOM(container, event, true);
-            }
-          }
-        }
+        if (state.currentPage === "feed") refreshFeedList();
       } catch {
       }
     });
@@ -987,7 +1116,6 @@
         const entry = JSON.parse(e.data);
         const subsystem = entry.subsystem || "";
         const isAgent = subsystem.startsWith("agent");
-        const isDebug = entry.level === "debug";
         const syntheticEvent = {
           id: `log-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
           type: isAgent ? "agent" : entry.level === "error" || entry.level === "fatal" ? "error" : "system",
@@ -1000,19 +1128,7 @@
         };
         state.feed.unshift(syntheticEvent);
         if (state.feed.length > 200) state.feed.length = 200;
-        if (isDebug && state.hideDebug) return;
-        if (state.currentPage === "feed") {
-          const tab = state.activeFeedTab;
-          const showOnTab = tab === "all" || tab === "agent" && isAgent || tab === "error" && (entry.level === "error" || entry.level === "fatal") || tab === "system" && !isAgent;
-          if (showOnTab) {
-            const container = document.getElementById("feedListContainer");
-            if (container) {
-              const empty = container.querySelector(".empty-state");
-              if (empty) empty.remove();
-              renderLogIntoFeed(container, entry);
-            }
-          }
-        }
+        if (state.currentPage === "feed") refreshFeedList();
       } catch {
       }
     });
@@ -1155,6 +1271,7 @@
     const activeCount = agents.filter((a) => a.status === "working").length;
     const totalCost = state.usageCost.reduce((s, d2) => s + (d2.totalCost || 0), 0).toFixed(2);
     const totalTokens = Math.round(state.usageCost.reduce((s, d2) => s + (d2.totalTokens || 0), 0) / 1e3);
+    const dashFeedItems = state.feed.slice(0, 8);
     setPageContent(`
     <div class="page">
       <div class="page-header">
@@ -1199,7 +1316,7 @@
             <a href="#feed" style="font-size:11px;color:var(--accent-orange)">View all \u2192</a>
           </div>
           <div class="card-body no-pad">
-            <div class="feed-list">${renderFeedItems(state.feed.slice(0, 8))}</div>
+            <div class="feed-list" id="dashFeedList">${renderFeedItems(state.feed.slice(0, 8))}</div>
           </div>
         </div>
 
@@ -1227,7 +1344,22 @@
         </div>
       </div>
     </div>
-  `);
+  `, () => {
+      const feedContainer = document.getElementById("dashFeedList");
+      if (feedContainer) {
+        feedContainer.addEventListener("click", (e) => handleFeedClick(e, dashFeedItems));
+      }
+      const agentContainer = document.getElementById("dashAgents");
+      if (agentContainer) {
+        agentContainer.addEventListener("click", (e) => {
+          const row = e.target.closest(".mini-agent[data-agent-name]");
+          if (!row) return;
+          const name = row.dataset.agentName || "";
+          const agent = state.agents.find((a) => a.name === name);
+          if (agent) showAgentActivityModal(agent);
+        });
+      }
+    });
   }
   function renderMiniAgentList(agents) {
     if (!agents.length) {
@@ -1237,9 +1369,9 @@
       const c = agentColor(a.name);
       const pct = a.percentUsed || (a.tokenUsage?.total && a.contextTokens ? Math.round(a.tokenUsage.total / a.contextTokens * 100) : 0);
       return `
-      <div class="mini-agent" onclick="window.__mc.navigate('team')">
+      <div class="mini-agent" data-agent-name="${escHtml(a.name)}" style="cursor:pointer">
         <div class="mini-agent-avatar" style="background:${c}15;color:${c}">
-          ${initials(a.name)}
+          ${a.identEmoji ? escHtml(a.identEmoji) : initials(a.name)}
           <div class="mini-status-dot ${a.status}"></div>
         </div>
         <div class="mini-agent-info">
@@ -1261,6 +1393,133 @@
       const label = d.date ? d.date.slice(5) : "?";
       return `<div class="usage-row"><span class="usage-day">${label}</span><div class="usage-bar-track"><div class="usage-bar-fill" style="width:${pct}%"></div></div><span class="usage-tokens">${tokens}k</span><span class="usage-cost">$${cost}</span></div>`;
     }).join("")}</div>`;
+  }
+  var statusLabels = {
+    working: "Working",
+    idle: "Idle",
+    busy: "Busy",
+    offline: "Offline",
+    error: "Error"
+  };
+  var statusColors = {
+    working: "var(--accent-green)",
+    idle: "var(--text-muted)",
+    busy: "var(--accent-yellow)",
+    offline: "var(--text-muted)",
+    error: "var(--accent-red)"
+  };
+  function showAgentActivityModal(agent) {
+    const m = openModal({ maxWidth: "600px" });
+    const c = agentColor(agent.name);
+    const emoji = agent.identEmoji || "";
+    const displayName = agent.identName || agent.name;
+    const status = agent.status || "idle";
+    const pct = agent.percentUsed || (agent.tokenUsage?.total && agent.contextTokens ? Math.round(agent.tokenUsage.total / agent.contextTokens * 100) : 0);
+    const agentFeed = state.feed.filter((ev) => {
+      const actor = (ev.actor || "").toLowerCase();
+      return actor === agent.name.toLowerCase() || actor === (agent.identName || "").toLowerCase();
+    }).slice(0, 20);
+    m.body.innerHTML = `
+    <div class="agent-activity-modal">
+      <div class="agent-activity-header">
+        <div class="agent-activity-avatar" style="background:${c}15;color:${c}">
+          ${emoji ? escHtml(emoji) : initials(agent.name)}
+          <div class="mini-status-dot ${status}" style="width:10px;height:10px;border-width:2px"></div>
+        </div>
+        <div style="flex:1;min-width:0">
+          <div class="agent-activity-name">${escHtml(displayName)}</div>
+          <div class="agent-activity-meta">
+            <span class="agent-activity-status" style="color:${statusColors[status] || "var(--text-muted)"}">${statusLabels[status] || status}</span>
+            ${agent.role ? ` \xB7 ${escHtml(agent.role)}` : ""}
+            ${agent.model ? ` \xB7 ${escHtml(agent.model)}` : ""}
+          </div>
+          ${agent.currentTask ? `<div class="agent-activity-task">\u2699\uFE0F ${escHtml(agent.currentTask)}</div>` : ""}
+          ${pct ? `<div class="agent-activity-usage"><div class="mini-usage-bar" style="width:120px"><div class="mini-usage-fill" style="width:${pct}%"></div></div><span style="font-size:10px;color:var(--text-muted)">${pct}% context</span></div>` : ""}
+        </div>
+        <a href="#team" class="agent-activity-configure" title="Configure agent">\u2699</a>
+      </div>
+
+      <div class="agent-activity-send">
+        <input type="text" id="agentTaskInput" class="agent-task-input" placeholder="Ask ${escHtml(displayName)} to do something\u2026" autocomplete="off" />
+        <button class="btn btn-primary agent-task-btn" id="agentTaskSend">Send</button>
+      </div>
+
+      <div class="agent-activity-feed-header">
+        <span>Recent Activity</span>
+        <span style="color:var(--text-muted);font-size:10px">${agentFeed.length} events</span>
+      </div>
+      <div class="agent-activity-feed" id="agentActivityFeed">
+        ${agentFeed.length ? renderAgentFeedItems(agentFeed) : '<div class="empty-state" style="padding:24px 0"><div class="empty-state-icon" style="font-size:20px">\u{1F4E1}</div><div class="empty-state-text">No recent activity</div></div>'}
+      </div>
+
+      <div style="text-align:right;margin-top:16px">
+        <button class="btn feed-detail-close" style="min-width:80px">Close</button>
+      </div>
+    </div>
+  `;
+    const input = m.body.querySelector("#agentTaskInput");
+    const sendBtn = m.body.querySelector("#agentTaskSend");
+    async function sendTask() {
+      const text = input.value.trim();
+      if (!text) return;
+      input.disabled = true;
+      sendBtn.disabled = true;
+      sendBtn.textContent = "Sending\u2026";
+      try {
+        await addQueueItem({ title: text, assignee: agent.name, priority: "medium" });
+        input.value = "";
+        input.placeholder = "\u2713 Sent! Ask something else\u2026";
+      } catch (err) {
+        input.placeholder = `Error: ${err.message || "Failed"}`;
+      } finally {
+        input.disabled = false;
+        sendBtn.disabled = false;
+        sendBtn.textContent = "Send";
+        input.focus();
+      }
+    }
+    sendBtn.addEventListener("click", sendTask);
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") sendTask();
+    });
+    setTimeout(() => input.focus(), 100);
+    const feedContainer = m.body.querySelector("#agentActivityFeed");
+    if (feedContainer) {
+      feedContainer.addEventListener("click", (e) => {
+        const row = e.target.closest(".feed-item[data-feed-idx]");
+        if (!row) return;
+        const idx = parseInt(row.dataset.feedIdx || "", 10);
+        if (!isNaN(idx) && idx >= 0 && idx < agentFeed.length) {
+          showFeedDetailModal(agentFeed[idx]);
+        }
+      });
+    }
+    m.body.querySelector(".feed-detail-close")?.addEventListener("click", () => m.close());
+    m.body.querySelector(".agent-activity-configure")?.addEventListener("click", () => m.close());
+  }
+  function renderAgentFeedItems(items) {
+    const iconMap2 = {
+      system: "\u2699",
+      plan: "\u{1F4CB}",
+      task: "\u{1F4E6}",
+      agent: "\u{1F916}",
+      error: "\u26A0",
+      pipeline: "\u{1F504}"
+    };
+    return items.map((ev, i) => {
+      const bodyPreview = ev.body ? ev.body.slice(0, 100) : "";
+      const icon = ev.icon || iconMap2[ev.type] || "\u2022";
+      return `
+    <div class="feed-item" data-feed-idx="${i}" style="cursor:pointer;padding:8px 6px">
+      <div class="feed-icon ${ev.type || "system"}" style="width:26px;height:26px;font-size:11px">${escHtml(icon)}</div>
+      <div class="feed-content">
+        <div class="feed-title" style="font-size:11px">${escHtml(ev.title)}</div>
+        <div class="feed-detail">${escHtml(ev.detail || "")}</div>
+        ${bodyPreview ? `<div class="feed-body-preview" style="max-width:380px">${escHtml(bodyPreview)}${ev.body.length > 100 ? "\u2026" : ""}</div>` : ""}
+      </div>
+      <div class="feed-time">${timeAgo(ev.timestamp)}</div>
+    </div>`;
+    }).join("");
   }
 
   // src/mission-control/client/pages/tasks.ts
@@ -2027,12 +2286,17 @@
     </div>`;
   }
   function renderSkillsTab(agentName, agentSkillsList, allEnabled) {
+    const cfg = (state.agentConfig || []).find((c) => c.id === agentName) || {};
+    const displayName = cfg.identityName || cfg.identityFull?.name || agentName;
     return `
     <div class="agent-config-section">
       <div class="rolecard-section-label">Agent Skills</div>
       <div style="font-size:11px;color:var(--text-muted);margin-bottom:8px">
-        Select data skills to assign to <strong>${escHtml(agentName)}</strong>. Skills determine what tools and integrations this agent can use.
+        Select data skills to assign to <strong>${escHtml(displayName)}</strong>. Skills determine what tools and integrations this agent can use.
       </div>
+      ${allEnabled ? `<div style="font-size:11px;color:var(--accent-orange);margin-bottom:8px;padding:6px 10px;background:color-mix(in srgb, var(--accent-orange) 8%, transparent);border-radius:6px;border:1px solid color-mix(in srgb, var(--accent-orange) 20%, transparent)">
+        \u{1F513} All skills are currently enabled (no restriction). Uncheck skills to limit this agent.
+      </div>` : ""}
       <div class="rolecard-skills" id="rc-skills">
         ${state.skills.map((s) => {
       const checked = allEnabled ? "checked" : agentSkillsList.includes(s.name) ? "checked" : "";
@@ -2157,9 +2421,15 @@
       });
     }
     if (_configTab === "skills") {
+      const allCheckboxes = document.querySelectorAll("#rc-skills input[type=checkbox]");
       const checkboxes = document.querySelectorAll("#rc-skills input[type=checkbox]:checked");
       const selected = Array.from(checkboxes).map((cb) => cb.value);
-      await saveAgentSkillsToServer(agentName, selected);
+      const skillsToSave = selected.length === allCheckboxes.length ? [] : selected;
+      const ok = await saveAgentSkillsToServer(agentName, skillsToSave);
+      if (btn) {
+        btn.textContent = ok ? "Saved \u2713" : "Error";
+      }
+      await new Promise((r) => setTimeout(r, 600));
       await fetchAgentConfig();
     }
     if (_configTab === "soul" || _configTab === "user") {
@@ -2222,9 +2492,11 @@
     closeAgentConfigModal();
   }
   async function submitManageSkills(agentName) {
+    const allCheckboxes = document.querySelectorAll("#rc-skills input[type=checkbox]");
     const checkboxes = document.querySelectorAll("#rc-skills input[type=checkbox]:checked");
     const selected = Array.from(checkboxes).map((cb) => cb.value);
-    await saveAgentSkillsToServer(agentName, selected);
+    const skillsToSave = selected.length === allCheckboxes.length ? [] : selected;
+    await saveAgentSkillsToServer(agentName, skillsToSave);
     await fetchAgentConfig();
     closeAgentConfigModal();
     if (state.currentPage === "team" || state.currentPage === "dashboard") renderPage();
@@ -2423,7 +2695,7 @@
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   }
-  function timeAgo3(iso) {
+  function timeAgo2(iso) {
     const diff = Date.now() - new Date(iso).getTime();
     const mins = Math.floor(diff / 6e4);
     if (mins < 1) return "just now";
@@ -2508,7 +2780,7 @@
       <div class="memory-file-meta">
         <span>${formatBytes(file.size)}</span>
         <span>\xB7</span>
-        <span>${timeAgo3(file.modified)}</span>
+        <span>${timeAgo2(file.modified)}</span>
       </div>
       ${file.preview ? `<div class="memory-file-preview">${escHtml(file.preview.slice(0, 80))}${file.preview.length > 80 ? "\u2026" : ""}</div>` : ""}
     </div>`;

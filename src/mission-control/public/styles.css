@@ -1643,6 +1643,130 @@ textarea.task-form-input {
   color: var(--text-secondary);
 }
 
+/* ── Thread grouping ───────────────────────────────────────────── */
+
+.feed-item.feed-thread-head {
+  border-left: 2px solid var(--accent-orange);
+}
+
+.feed-thread-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 4px;
+  font-size: 10px;
+  color: var(--accent-orange);
+  font-weight: 500;
+  cursor: pointer;
+}
+.feed-thread-badge:hover { opacity: 0.85; }
+
+.feed-thread-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  border-radius: 8px;
+  background: rgba(251, 146, 60, 0.15);
+  color: var(--accent-orange);
+  font-size: 10px;
+  font-weight: 600;
+  padding: 0 4px;
+}
+
+/* Thread timeline in modal */
+.feed-thread-timeline {
+  padding: 4px 0 0;
+  position: relative;
+  margin-left: 7px;
+}
+.feed-thread-timeline::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 12px;
+  bottom: 12px;
+  width: 2px;
+  background: var(--border);
+  border-radius: 1px;
+}
+
+.feed-thread-event {
+  display: flex;
+  gap: 12px;
+  padding: 10px 8px 10px 0;
+  position: relative;
+  cursor: pointer;
+  border-radius: var(--radius);
+  transition: background 0.15s;
+  margin-left: -1px;
+}
+.feed-thread-event:hover {
+  background: rgba(255,255,255,0.03);
+}
+.feed-thread-event + .feed-thread-event {
+  border-top: 1px solid rgba(255,255,255,0.04);
+}
+
+.feed-thread-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-top: 3px;
+  position: relative;
+  z-index: 1;
+  opacity: 0.8;
+}
+
+.feed-thread-event-content {
+  flex: 1;
+  min-width: 0;
+}
+.feed-thread-event-header {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+}
+.feed-thread-event-icon {
+  font-size: 12px;
+  flex-shrink: 0;
+  line-height: 1.4;
+}
+.feed-thread-event-title {
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+  word-break: break-word;
+}
+.feed-thread-event-detail {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+.feed-thread-event-body {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+  font-family: var(--font-mono);
+  line-height: 1.4;
+  max-height: 60px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: var(--bg-surface);
+  border-radius: var(--radius);
+  padding: 6px 8px;
+}
+.feed-thread-event-time {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  margin-top: 4px;
+}
+
 /* ═══ Skills Page ══════════════════════════════════════════════════ */
 .skills-grid-page {
   display: grid;
@@ -1962,6 +2086,124 @@ textarea.task-form-input {
   font-family: var(--font-mono);
   width: 30px;
   text-align: right;
+}
+
+/* ── Agent Activity Modal ──────────────────────────────────────── */
+
+.agent-activity-modal { padding: 4px 0; }
+
+.agent-activity-header {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  margin-bottom: 16px;
+}
+.agent-activity-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+  position: relative;
+}
+.agent-activity-avatar .mini-status-dot {
+  position: absolute;
+  bottom: -1px;
+  right: -1px;
+}
+.agent-activity-name {
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+.agent-activity-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+.agent-activity-status {
+  font-weight: 600;
+  text-transform: capitalize;
+}
+.agent-activity-task {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+}
+.agent-activity-usage {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+.agent-activity-configure {
+  font-size: 16px;
+  color: var(--text-muted);
+  text-decoration: none;
+  padding: 4px;
+  border-radius: 4px;
+  transition: color 0.15s, background 0.15s;
+}
+.agent-activity-configure:hover {
+  color: var(--text-primary);
+  background: rgba(255,255,255,0.05);
+}
+
+.agent-activity-send {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.agent-task-input {
+  flex: 1;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px 12px;
+  font-size: 12px;
+  color: var(--text-primary);
+  outline: none;
+  transition: border-color 0.15s;
+}
+.agent-task-input:focus {
+  border-color: var(--accent-orange);
+}
+.agent-task-input::placeholder {
+  color: var(--text-muted);
+}
+.agent-task-btn {
+  padding: 8px 16px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.agent-task-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.agent-activity-feed-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 0;
+}
+.agent-activity-feed {
+  max-height: 320px;
+  overflow-y: auto;
+}
+.agent-activity-feed .feed-item:last-child {
+  border-bottom: none;
 }
 
 /* ═══ Tab Switcher ═════════════════════════════════════════════════ */

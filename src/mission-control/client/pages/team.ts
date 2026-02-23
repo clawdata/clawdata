@@ -391,12 +391,19 @@ function renderFileTab(fileName: string, description: string): string {
 }
 
 function renderSkillsTab(agentName: string, agentSkillsList: string[], allEnabled: boolean): string {
+  // Resolve display name from agentConfig (prefer identity name over raw ID)
+  const cfg: any = (state.agentConfig || []).find((c: any) => c.id === agentName) || {};
+  const displayName = cfg.identityName || cfg.identityFull?.name || agentName;
+
   return `
     <div class="agent-config-section">
       <div class="rolecard-section-label">Agent Skills</div>
       <div style="font-size:11px;color:var(--text-muted);margin-bottom:8px">
-        Select data skills to assign to <strong>${escHtml(agentName)}</strong>. Skills determine what tools and integrations this agent can use.
+        Select data skills to assign to <strong>${escHtml(displayName)}</strong>. Skills determine what tools and integrations this agent can use.
       </div>
+      ${allEnabled ? `<div style="font-size:11px;color:var(--accent-orange);margin-bottom:8px;padding:6px 10px;background:color-mix(in srgb, var(--accent-orange) 8%, transparent);border-radius:6px;border:1px solid color-mix(in srgb, var(--accent-orange) 20%, transparent)">
+        \u{1F513} All skills are currently enabled (no restriction). Uncheck skills to limit this agent.
+      </div>` : ""}
       <div class="rolecard-skills" id="rc-skills">
         ${state.skills.map(s => {
           const checked = allEnabled ? "checked" : agentSkillsList.includes(s.name) ? "checked" : "";
@@ -527,10 +534,16 @@ export async function saveAgentConfig(agentName: string): Promise<void> {
   }
 
   if (_configTab === "skills") {
+    const allCheckboxes = document.querySelectorAll("#rc-skills input[type=checkbox]") as NodeListOf<HTMLInputElement>;
     const checkboxes = document.querySelectorAll("#rc-skills input[type=checkbox]:checked") as NodeListOf<HTMLInputElement>;
     const selected = Array.from(checkboxes).map(cb => cb.value);
+    // If all skills are checked, send empty array → "no restriction" (skills: null)
+    const skillsToSave = selected.length === allCheckboxes.length ? [] : selected;
     // Write to gateway (source of truth), then re-sync
-    await saveAgentSkillsToServer(agentName, selected);
+    const ok = await saveAgentSkillsToServer(agentName, skillsToSave);
+    if (btn) { btn.textContent = ok ? "Saved \u2713" : "Error"; }
+    // Brief visual feedback before closing
+    await new Promise(r => setTimeout(r, 600));
     await fetchAgentConfig();
   }
 
@@ -593,9 +606,12 @@ export function submitRoleCard(agentName: string): Promise<void> { return saveAg
 export function showManageSkillsModal(agentName: string): void { _configTab = "skills"; showAgentConfigModal(agentName); }
 export function closeManageSkillsModal(): void { closeAgentConfigModal(); }
 export async function submitManageSkills(agentName: string): Promise<void> {
+  const allCheckboxes = document.querySelectorAll("#rc-skills input[type=checkbox]") as NodeListOf<HTMLInputElement>;
   const checkboxes = document.querySelectorAll("#rc-skills input[type=checkbox]:checked") as NodeListOf<HTMLInputElement>;
   const selected = Array.from(checkboxes).map(cb => cb.value);
-  await saveAgentSkillsToServer(agentName, selected);
+  // If all skills are checked, send empty array → "no restriction" (skills: null)
+  const skillsToSave = selected.length === allCheckboxes.length ? [] : selected;
+  await saveAgentSkillsToServer(agentName, skillsToSave);
   await fetchAgentConfig();
   closeAgentConfigModal();
   if (state.currentPage === "team" || state.currentPage === "dashboard") renderPage();
