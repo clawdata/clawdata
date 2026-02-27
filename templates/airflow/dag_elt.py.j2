@@ -1,0 +1,50 @@
+{#- Airflow ELT DAG template -#}
+{#- Variables: dag_id, source_system, destination_schema, schedule, extract_command, load_command -#}
+
+from datetime import datetime
+
+from airflow import DAG
+from airflow.operators.bash import BashOperator
+from airflow.operators.empty import EmptyOperator
+
+default_args = {
+    "owner": "data-team",
+    "depends_on_past": False,
+    "retries": 2,
+}
+
+with DAG(
+    dag_id="{{ dag_id }}",
+    description="ELT pipeline: {{ source_system }} → {{ destination_schema }}",
+    schedule="{{ schedule | default('@daily') }}",
+    start_date=datetime(2026, 1, 1),
+    default_args=default_args,
+    catchup=False,
+    tags=["elt", "{{ source_system }}", "data-engineering"],
+) as dag:
+
+    start = EmptyOperator(task_id="start")
+
+    extract = BashOperator(
+        task_id="extract",
+        bash_command="{{ extract_command }}",
+    )
+
+    load = BashOperator(
+        task_id="load",
+        bash_command="{{ load_command }}",
+    )
+
+    transform = BashOperator(
+        task_id="transform",
+        bash_command="cd /opt/dbt && dbt run --models tag:{{ source_system }}",
+    )
+
+    test = BashOperator(
+        task_id="test",
+        bash_command="cd /opt/dbt && dbt test --models tag:{{ source_system }}",
+    )
+
+    end = EmptyOperator(task_id="end")
+
+    start >> extract >> load >> transform >> test >> end

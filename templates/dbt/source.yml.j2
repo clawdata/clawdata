@@ -1,0 +1,27 @@
+{#- dbt source YAML template -#}
+{#- Variables: source_name, database, schema, tables (list of dicts: name, description, columns) -#}
+
+version: 2
+
+sources:
+  - name: {{ source_name }}
+    database: {{ database }}
+    schema: {{ schema }}
+    tables:
+      {%- for table in tables %}
+      - name: {{ table.name }}
+        description: "{{ table.description }}"
+        {%- if table.columns is defined %}
+        columns:
+          {%- for col in table.columns %}
+          - name: {{ col.name }}
+            description: "{{ col.description | default('') }}"
+            {%- if col.tests is defined %}
+            tests:
+              {%- for test in col.tests %}
+              - {{ test }}
+              {%- endfor %}
+            {%- endif %}
+          {%- endfor %}
+        {%- endif %}
+      {%- endfor %}

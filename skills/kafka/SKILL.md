@@ -1,52 +1,105 @@
 ---
 name: kafka
-description: >
-  Produce and consume messages from Apache Kafka — list topics, check
-  consumer group lag, and stream data into DuckDB.
-metadata:
-  openclaw:
-    requires:
-      bins: [clawdata]
-    primaryEnv: KAFKA_BOOTSTRAP_SERVERS
-    tags: [streaming, kafka, messages, topics, events]
+description: "Work with Apache Kafka — manage topics, produce/consume messages, inspect consumer groups, and monitor clusters."
+metadata: {"openclaw": {"emoji": "📨", "requires": {"bins": ["kafka-topics"]}, "tags": ["streaming", "kafka", "messaging", "events", "data"]}}
 ---
 
 # Kafka
 
-Produce and consume messages from Apache Kafka clusters.
+You help manage Apache Kafka clusters using the Kafka CLI tools.
+Use this when the user asks about topics, messages, consumer groups, or Kafka cluster management.
+
+## Bootstrap Server
+
+Most commands require `--bootstrap-server <broker:port>`. Default is typically `localhost:9092`.
 
 ## Commands
 
-| Task | Command |
-|------|---------|
-| List topics | `clawdata kafka topics` |
-| Describe topic | `clawdata kafka describe <topic>` |
-| Consume messages | `clawdata kafka consume <topic> --limit 10` |
-| Produce message | `clawdata kafka produce <topic> --message '{"key":"value"}'` |
-| Consumer group lag | `clawdata kafka lag <group>` |
-| Consume to DuckDB | `clawdata kafka ingest <topic> --table <table>` |
+### Topics
 
-## Configuration
-
-| Env Var | Description |
-|---------|-------------|
-| `KAFKA_BOOTSTRAP_SERVERS` | Comma-separated broker list (e.g. `localhost:9092`) |
-| `KAFKA_SASL_USERNAME` | SASL username (optional) |
-| `KAFKA_SASL_PASSWORD` | SASL password (optional) |
-| `KAFKA_SECURITY_PROTOCOL` | `PLAINTEXT`, `SASL_SSL`, etc. |
-
-## When to use
-
-- User wants to check what events are flowing → `clawdata kafka consume`
-- User needs to load streaming data into DuckDB → `clawdata kafka ingest`
-- User asks about topic lag → `clawdata kafka lag`
-
-## Example: Stream to DuckDB
+#### List topics
 
 ```bash
-# Consume 1000 messages from 'events' topic into DuckDB table
-clawdata kafka ingest events --table raw_events --limit 1000
-
-# Then transform with dbt
-clawdata dbt run --select raw_events+
+kafka-topics --bootstrap-server localhost:9092 --list
 ```
+
+#### Describe a topic
+
+```bash
+kafka-topics --bootstrap-server localhost:9092 --describe --topic <topic_name>
+```
+
+#### Create a topic
+
+```bash
+kafka-topics --bootstrap-server localhost:9092 --create --topic <topic_name> --partitions 6 --replication-factor 1
+```
+
+#### Delete a topic
+
+```bash
+kafka-topics --bootstrap-server localhost:9092 --delete --topic <topic_name>
+```
+
+#### Alter topic partitions
+
+```bash
+kafka-topics --bootstrap-server localhost:9092 --alter --topic <topic_name> --partitions 12
+```
+
+### Producing Messages
+
+#### Produce from stdin
+
+```bash
+kafka-console-producer --bootstrap-server localhost:9092 --topic <topic_name>
+```
+
+#### Produce with key
+
+```bash
+kafka-console-producer --bootstrap-server localhost:9092 --topic <topic_name> --property parse.key=true --property key.separator=:
+```
+
+### Consuming Messages
+
+#### Consume from beginning
+
+```bash
+kafka-console-consumer --bootstrap-server localhost:9092 --topic <topic_name> --from-beginning --max-messages 10
+```
+
+#### Consume with key and timestamp
+
+```bash
+kafka-console-consumer --bootstrap-server localhost:9092 --topic <topic_name> --from-beginning --max-messages 10 --property print.key=true --property print.timestamp=true
+```
+
+### Consumer Groups
+
+#### List consumer groups
+
+```bash
+kafka-consumer-groups --bootstrap-server localhost:9092 --list
+```
+
+#### Describe a consumer group (check lag)
+
+```bash
+kafka-consumer-groups --bootstrap-server localhost:9092 --describe --group <group_id>
+```
+
+#### Reset offsets
+
+```bash
+kafka-consumer-groups --bootstrap-server localhost:9092 --group <group_id> --topic <topic_name> --reset-offsets --to-earliest --execute
+```
+
+## Best Practices
+
+- Use meaningful topic naming: `<domain>.<entity>.<event>` (e.g. `orders.payments.completed`)
+- Set appropriate partition counts based on throughput needs
+- Monitor consumer lag to detect processing bottlenecks
+- Use Avro/Protobuf with Schema Registry for production topics
+- Configure retention policies based on use case (`retention.ms`)
+- Use compacted topics for slowly changing reference data

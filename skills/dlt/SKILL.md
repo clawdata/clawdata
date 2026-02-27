@@ -1,70 +1,107 @@
 ---
 name: dlt
-description: >
-  Declarative data ingestion with dlt (data load tool) — replace manual CSV
-  loading with source connectors for APIs, databases, and SaaS platforms.
-metadata:
-  openclaw:
-    requires:
-      bins: [clawdata]
-    primaryEnv: DLT_DESTINATION
-    tags: [ingestion, etl, connectors, api, dlt, pipeline]
+description: "Build data ingestion pipelines with dlt (data load tool) — extract from APIs, databases, and files, then load to any destination."
+metadata: {"openclaw": {"emoji": "🔄", "requires": {"bins": ["dlt"]}, "tags": ["ingestion", "dlt", "etl", "elt", "pipeline", "data"]}}
 ---
 
 # dlt (data load tool)
 
-Declarative ingestion pipelines — replace manual CSV loading with
-source connectors for APIs, databases, and SaaS platforms.
+You help build data ingestion pipelines using **`dlt`**.
+Use this when the user wants to extract data from APIs, databases, or files and load it into a warehouse or lakehouse.
 
 ## Commands
 
-| Task | Command |
-|------|---------|
-| Initialise dlt pipeline | `clawdata dlt init <source> duckdb` |
-| Run a pipeline | `clawdata dlt run <pipeline>` |
-| List available sources | `clawdata dlt sources` |
-| Check pipeline status | `clawdata dlt status <pipeline>` |
-| Show schema | `clawdata dlt schema <pipeline>` |
+### Initialise a new pipeline
 
-## Supported Sources
+```bash
+dlt init <source_name> <destination_name>
+```
 
-dlt supports 100+ verified sources including:
+Example:
 
-| Source | Example |
-|--------|---------|
-| REST APIs | GitHub, Notion, Slack, HubSpot |
-| Databases | PostgreSQL, MySQL, MongoDB |
-| SaaS | Stripe, Salesforce, Google Sheets |
-| Files | CSV, JSON, Parquet (local or remote) |
+```bash
+dlt init sql_database duckdb
+```
 
-## Example Pipeline
+### Run a pipeline
+
+```bash
+python <pipeline_script>.py
+```
+
+### Check pipeline status
+
+```bash
+dlt pipeline <pipeline_name> info
+```
+
+### List loaded tables
+
+```bash
+dlt pipeline <pipeline_name> show
+```
+
+## Pipeline Patterns
+
+### Basic API source
 
 ```python
-# pipelines/github_pipeline.py
 import dlt
-from dlt.sources.rest_api import rest_api_source
 
-source = rest_api_source({
-    "client": {"base_url": "https://api.github.com"},
-    "resources": ["repos/{owner}/{repo}/issues"],
-})
+@dlt.source
+def my_api_source(api_key=dlt.secrets.value):
+    @dlt.resource(write_disposition="replace")
+    def customers():
+        response = requests.get("https://api.example.com/customers",
+                                headers={"Authorization": f"Bearer {api_key}"})
+        yield response.json()
+
+    return customers
 
 pipeline = dlt.pipeline(
-    pipeline_name="github_issues",
+    pipeline_name="my_api",
     destination="duckdb",
-    dataset_name="github",
+    dataset_name="raw",
 )
 
+load_info = pipeline.run(my_api_source())
+print(load_info)
+```
+
+### Incremental loading
+
+```python
+@dlt.resource(write_disposition="merge", primary_key="id")
+def orders(updated_at=dlt.sources.incremental("updated_at")):
+    params = {"since": updated_at.last_value}
+    response = requests.get("https://api.example.com/orders", params=params)
+    yield response.json()
+```
+
+### SQL database source
+
+```python
+from dlt.sources.sql_database import sql_database
+
+source = sql_database(
+    credentials="postgresql://user:pass@host:5432/db",
+    schema="public",
+    table_names=["customers", "orders"],
+)
+
+pipeline = dlt.pipeline(destination="bigquery", dataset_name="raw")
 pipeline.run(source)
 ```
 
-## When to use
+## Supported Destinations
 
-- User wants to load data from an API → `clawdata dlt init <source> duckdb`
-- User wants to replace manual CSV downloads → create a dlt pipeline
-- User needs incremental loading from a database → dlt handles state management
+- DuckDB, PostgreSQL, BigQuery, Snowflake, Redshift, Databricks, Synapse, Filesystem (S3, GCS)
 
-## Integration
+## Best Practices
 
-dlt writes directly to DuckDB, so loaded data is immediately available
-for dbt transformations and SQL queries.
+- Use `dlt.secrets` and `dlt.config` for credentials — never hardcode
+- Choose `write_disposition` carefully: `replace`, `append`, or `merge`
+- Define `primary_key` for merge operations
+- Use `dlt.sources.incremental` for efficient incremental loads
+- Add schema contracts to catch source schema changes
+- Store pipeline state with the destination for production deployments

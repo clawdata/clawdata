@@ -1,0 +1,28 @@
+{#- dbt mart model template -#}
+{#- Variables: model_name, description, metrics (list of dicts: name, expression), dimensions (list), grain -#}
+
+with base as (
+
+    select * from {{ '{{' }} ref('{{ model_name }}') {{ '}}' }}
+
+),
+
+final as (
+
+    select
+        {%- for dim in dimensions %}
+        {{ dim }},
+        {%- endfor %}
+        {%- for metric in metrics %}
+        {{ metric.expression }} as {{ metric.name }}{% if not loop.last %},{% endif %}
+        {%- endfor %}
+
+    from base
+    group by
+        {%- for dim in dimensions %}
+        {{ dim }}{% if not loop.last %},{% endif %}
+        {%- endfor %}
+
+)
+
+select * from final

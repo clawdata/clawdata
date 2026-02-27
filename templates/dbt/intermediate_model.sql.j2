@@ -1,0 +1,18 @@
+{#- dbt intermediate model template -#}
+{#- Variables: model_name, description, upstream_models (list), join_key -#}
+
+with
+{%- for upstream in upstream_models %}
+{{ upstream }} as (
+    select * from {{ '{{' }} ref('{{ upstream }}') {{ '}}' }}
+){% if not loop.last %},{% endif %}
+{%- endfor %}
+
+select
+    {{ upstream_models[0] }}.*
+
+from {{ upstream_models[0] }}
+{%- for upstream in upstream_models[1:] %}
+left join {{ upstream }}
+    on {{ upstream_models[0] }}.{{ join_key }} = {{ upstream }}.{{ join_key }}
+{%- endfor %}

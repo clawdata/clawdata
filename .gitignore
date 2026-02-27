@@ -1,21 +1,22 @@
-node_modules/
-build/
-*.log
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+.eggs/
+*.egg
+.venv/
+venv/
 .env
+*.db
+*.sqlite
 .DS_Store
-dbt_modules/
-target/
-logs/
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/
+node_modules/
 
-# User data (OpenClaw workspace, DuckDB, config, memory)
+# User data - managed at runtime via setup/dialogs
 userdata/
-
-# dbt models (keep sample only)
-templates/dbt/models/*
-!templates/dbt/models/sample/
-
-# Evidence
-templates/evidence/.evidence/
-templates/evidence/node_modules/
-templates/evidence/build/
-templates/evidence/package-lock.json
+**/*.key
+**/*.pem
+**/secrets*

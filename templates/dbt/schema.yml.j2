@@ -1,0 +1,19 @@
+{#- dbt schema YAML template -#}
+{#- Variables: model_name, description, columns (list of dicts: name, description, tests) -#}
+
+version: 2
+
+models:
+  - name: {{ model_name }}
+    description: "{{ description }}"
+    columns:
+      {%- for col in columns %}
+      - name: {{ col.name }}
+        description: "{{ col.description | default('') }}"
+        {%- if col.tests is defined %}
+        tests:
+          {%- for test in col.tests %}
+          - {{ test }}
+          {%- endfor %}
+        {%- endif %}
+      {%- endfor %}

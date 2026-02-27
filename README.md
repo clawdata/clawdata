@@ -1,172 +1,109 @@
-<p align="center">
-  <img src="media/octopus64.png" alt="ClawData" width="100" />
-</p>
-
-<h1 align="center">ClawData</h1>
+# ClawData
 
 <p align="center">
-  Open-source data engineering skills for <a href="https://github.com/openclaw/openclaw">OpenClaw</a>
+  <img src="web/public/assets/shell.png" alt="ClawData" width="120" />
 </p>
 
----
+An easy-to-use dashboard and FastAPI backend for managing [OpenClaw](https://docs.openclaw.ai/) agents built for data teams. Spin up agents that understand your pipelines, query your warehouses, generate dbt models, review SQL, and more — all from one UI instead of the command line. Built for data engineers and analysts who want AI assistance without leaving their stack.
 
-Data engineering shouldn't feel mysterious, fragile, or reserved for big tech teams.
+## Screenshots
 
-**ClawData** is an open-source skills library that turns [OpenClaw](https://github.com/openclaw/openclaw) into an AI-powered data engineer. Ask it to ingest files, build transformations, query warehouses, or orchestrate pipelines — and it just works.
+### Dashboard
 
-It ships with **15 skills** covering databases, orchestration, ingestion, storage, and BI — plus companion apps for notebooks, dashboards, and data exploration.
+Overview of your agents, system health, and quick actions.
 
-And because it's fully open source, you can **add your own skills** for any tool your team uses.
+![Home](web/public/assets/home.png)
 
-## Mission Control
+### Chat
 
-Launch Mission Control — a web-based dashboard for managing your data workspace:
+Talk to any agent directly. Switch agents, view connection status, and review conversation history.
+
+![Chat](web/public/assets/chat.png)
+
+### Agent Configuration
+
+Set up agents with custom models, skills, and linked sub-agents.
+
+![Agent Configuration](web/public/assets/agent_configure.png)
+
+### Skills
+
+Browse, enable, and install skills for your agents — databases, APIs, data tools, and more.
+
+![Skills](web/public/assets/skills.png)
+
+### Costing
+
+Track token usage and estimated costs across all agents and sessions.
+
+![Costing](web/public/assets/costing.png)
+
+## Quick Start (Docker)
+
+The fastest way to get running:
 
 ```bash
-clawdata mc
+# Copy env and configure
+cp .env.example .env
+# Edit .env with your OpenClaw gateway token
+
+# Start everything
+docker compose up --build
 ```
 
-<p align="center">
-  <img src="media/github/agents.png" alt="Agent management" width="700" />
-  <br/><em>Agent management: Configure and monitor AI data engineers</em>
-</p>
+This starts:
+- **API** at http://localhost:8000 (FastAPI + OpenClaw gateway)
+- **Web UI** at http://localhost:3000 (Next.js)
 
-<p align="center">
-  <img src="media/github/skillsregistry.png" alt="Skills registry" width="700" />
-  <br/><em>Skills registry: Browse and manage your 15 data engineering skills</em>
-</p>
+Data is persisted in Docker volumes (`clawdata-db`, `clawdata-userdata`).
 
-<p align="center">
-  <img src="media/github/dashboard.png" alt="Analytics dashboard" width="700" />
-  <br/><em>Dashboard: Real-time metrics and workspace analytics</em>
-</p>
+To stop: `docker compose down` (add `-v` to also remove volumes/data).
 
-<p align="center">
-  <img src="media/github/office.png" alt="Office overview" width="700" />
-  <br/><em>Office view: See all agents, desks, and active tasks at a glance</em>
-</p>
-
-## Demo
-
-<p align="center">
-  <img src="media/github/demo.gif" alt="ClawData demo" width="700" />
-</p>
-
-## Quick start
+## Quick Start (Local)
 
 ```bash
-# 1. Install OpenClaw (if you haven't already)
-npm install -g openclaw@latest
-openclaw onboard --install-daemon
+# Create venv and install
+python -m venv .venv && source .venv/bin/activate
+pip install -e ".[dev]"
 
-# 2. Clone & install ClawData
-git clone https://github.com/clawdata/clawdata.git && cd clawdata
-./setup.sh
+# Copy env and configure
+cp .env.example .env
+# Edit .env with your OpenClaw gateway token
 
-# 3. Start Mission Control or chat directly with OpenClaw
-clawdata mc              # Web dashboard (opens http://localhost:3200)
-# OR
-openclaw tui             # Terminal interface
+# Run migrations
+alembic upgrade head
+
+# Start the server
+uvicorn app.main:app --reload --port 8000
 ```
 
-The setup script installs dependencies, opens an interactive skill picker, and links everything into OpenClaw. That's it — start chatting or exploring the dashboard.
-
-## What can it do?
-
-Once skills are linked, OpenClaw can handle data engineering requests naturally:
-
-> *"Load the CSV files and show me what's in the data"*  
-> *"Run the dbt models and tell me if any tests fail"*  
-> *"Which customers have the highest lifetime value?"*  
-> *"Create a new dbt model that aggregates orders by month"*
-
-Just command-line tools that the AI agent calls on your behalf.
-
-## Skills
-
-| Skill | What it does |
-|-------|-------------|
-| **duckdb** | Query local DuckDB — SQL, tables, schemas, data ingestion |
-| **dbt** | Transform data — run models, tests, compile, seeds, docs |
-| **snowflake** | Query Snowflake warehouse — SQL, staging, loading |
-| **airflow** | Orchestrate pipelines — DAGs, tasks, connections |
-| **postgres** | Query and manage PostgreSQL databases |
-| **bigquery** | Google BigQuery — query, load, manage datasets |
-| **databricks** | Databricks SQL, Unity Catalog, job triggers |
-| **spark** | Submit and monitor Spark jobs |
-| **s3** | Cloud storage (S3 / GCS / Azure) — list, upload, download, preview |
-| **kafka** | Produce/consume messages, topic management, consumer lag |
-| **dlt** | Declarative ingestion pipelines with 100+ source connectors |
-| **dagster** | Asset-based orchestration, sensors, schedules |
-| **fivetran** | Managed connectors (Fivetran / Airbyte) — trigger syncs, status |
-| **great-expectations** | Data quality validation — suites, checkpoints, results |
-| **metabase** | BI dashboards (Metabase / Superset) — questions, refresh, export |
-
-Each skill is a `SKILL.md` file that teaches the agent when and how to use the tool. Skills are symlinked into OpenClaw's workspace so the agent discovers them automatically.
-
-### Managing skills
+### Frontend
 
 ```bash
-clawdata skills          # interactive: toggle skills on/off
-clawdata doctor          # check that everything is configured correctly
+cd web
+npm install
+npm run dev
+# Open http://localhost:3000
 ```
 
-## The `clawdata` helper
+## API Docs
 
-The CLI provides quick access to common workflows:
-
-```bash
-clawdata mc              # open Mission Control dashboard (port 3200)
-clawdata skills          # manage which skills are enabled
-clawdata doctor          # verify setup and configuration
-clawdata help            # full command reference
-```
+Once running, visit:
+- Swagger UI: http://localhost:8000/docs
+- ReDoc: http://localhost:8000/redoc
 
 ## Architecture
 
-ClawData includes sample data and a medallion-architecture dbt project:
+See [PLAN.md](PLAN.md) for the full implementation plan.
 
-- **Bronze** — raw ingestion views (`SELECT *` from source)
-- **Silver** — cleans, deduplicates, normalises, and validates
-- **Gold** — dimensional model (dims + facts) and analytics
+## Project Layout
 
-## Project structure
-
-```
-clawdata/
-├── skills/                ← 15 skill definitions (SKILL.md files)
-├── src/                   ← TypeScript CLI source
-│   ├── mission-control/   ← Web dashboard
-│   └── lib/               ← Core functionality
-├── templates/             ← Sample apps (dbt, Jupyter, Evidence, etc.)
-└── data/                  ← DuckDB warehouse + sample files
-```
-
-## Adding custom skills
-
-Create a `SKILL.md` file in `skills/your-tool/` that teaches the AI how to use your tool:
-
-```markdown
----
-name: my-tool
-description: What this skill does
-tools:
-  - my-tool-cli
----
-
-## When to use
-When the user asks for...
-
-## Commands
-List available commands and what they do.
-```
-
-Then run `clawdata skills` to enable it. The agent will discover it automatically.
-
-## Configuration
-
-Configuration is auto-detected. Run `clawdata doctor` to verify your setup.
-
-## License
-
-MIT
+| Directory | Purpose |
+|-----------|---------|
+| `app/` | FastAPI application (routers, services, adapters) |
+| `templates/` | Jinja2 reference templates (dbt, airflow, sql) |
+| `skills/` | Agent skill definitions (SKILL.md markdown) |
+| `userdata/` | Agent workspaces (head agent + sub-agents) |
+| `migrations/` | Alembic database migrations |
+| `tests/` | Test suite |
+| `web/` | Next.js 15 frontend (App Router, shadcn/ui) |

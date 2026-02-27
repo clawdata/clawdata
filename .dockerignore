@@ -1,10 +1,40 @@
-node_modules
-build
-.git
-*.duckdb
-*.duckdb.wal
-apps/dbt/target
-apps/dbt/logs
-apps/dbt/dbt_packages
-apps/airflow/dags/__pycache__
-.clawdata
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+.eggs/
+*.egg
+.venv/
+venv/
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/
+
+# DB files (rebuilt at runtime)
+*.db
+*.sqlite
+
+# Environment
+.env
+.env.local
+
+# OS
+.DS_Store
+
+# Node (web has its own Dockerfile)
+web/node_modules/
+web/.next/
+
+# Git
+.git/
+.gitignore
+
+# IDE
+.vscode/
+.idea/
+
+# Agent runtime data
+userdata/agents/*/memory/
+**/*.key
+**/*.pem

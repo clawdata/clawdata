@@ -1,31 +1,39 @@
 services:
-  clawdata:
-    build: .
-    container_name: clawdata
+  # ── Backend (FastAPI + OpenClaw gateway) ──────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"    # FastAPI
+      - "18789:18789"  # OpenClaw gateway
     volumes:
-      - ./data:/app/data
-      - ./apps/dbt:/app/apps/dbt
+      - clawdata-db:/app/data        # SQLite persistence
+      - clawdata-userdata:/app/userdata  # Agent memory & config
+      - clawdata-openclaw:/root/.openclaw  # OpenClaw config & state
+    env_file:
+      - .env
     environment:
-      - DB_PATH=/app/data/warehouse.duckdb
-      - DATA_FOLDER=/app/data/sample
-      - DBT_PROJECT_DIR=/app/apps/dbt
-      - DBT_PROFILES_DIR=/app/apps/dbt
-    entrypoint: ["clawdata"]
-    command: ["help"]
+      - CLAWDATA_DATABASE_URL=sqlite+aiosqlite:///./data/clawdata.db
+      - CLAWDATA_OPENCLAW_GATEWAY_HOST=0.0.0.0
+      - CLAWDATA_OPENCLAW_AUTO_INSTALL=true
+    restart: unless-stopped
 
-  # Run full pipeline
-  pipeline:
-    build: .
-    container_name: clawdata-pipeline
-    volumes:
-      - ./data:/app/data
-      - ./apps/dbt:/app/apps/dbt
+  # ── Frontend (Next.js) ───────────────────────────────────────────
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
     environment:
-      - DB_PATH=/app/data/warehouse.duckdb
-      - DATA_FOLDER=/app/data/sample
-      - DBT_PROJECT_DIR=/app/apps/dbt
-      - DBT_PROFILES_DIR=/app/apps/dbt
-    entrypoint: ["clawdata"]
-    command: ["run"]
-    profiles:
-      - pipeline
+      - NEXT_PUBLIC_API_URL=http://api:8000
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  clawdata-db:
+  clawdata-userdata:
+  clawdata-openclaw:

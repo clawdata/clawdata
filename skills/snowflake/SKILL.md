@@ -1,108 +1,118 @@
 ---
 name: snowflake
-description: >
-  Query and manage a Snowflake cloud data warehouse — run SQL, explore schemas,
-  manage warehouses, and load data. Uses the SnowSQL CLI.
-metadata:
-  openclaw:
-    requires:
-      bins: [clawdata]
-    primaryEnv: SNOWSQL_ACCOUNT
-    tags: [database, snowflake, sql, cloud, warehouse]
+description: "Query and manage Snowflake data warehouses — run SQL, manage warehouses, inspect schemas, and control access."
+metadata: {"openclaw": {"emoji": "❄️", "requires": {"bins": ["snow"]}, "tags": ["database", "snowflake", "sql", "cloud", "data", "warehouse"]}}
 ---
 
 # Snowflake
 
-You can query and manage a Snowflake cloud warehouse using the **`snowsql`** CLI.
-Use this when the user asks about cloud-hosted data, Snowflake tables, or needs to run SQL on Snowflake.
+You help query and manage Snowflake data warehouses using the **`snow`** (Snowflake CLI) or SQL commands.
+Use this when the user asks about Snowflake tables, queries, warehouses, or administration.
 
-> For local DuckDB queries, use the **duckdb** skill. For dbt transformations, use the **dbt** skill.
+## Authentication
+
+Configure the Snowflake CLI:
+
+```bash
+snow connection add
+```
+
+Or set environment variables: `SNOWFLAKE_ACCOUNT`, `SNOWFLAKE_USER`, `SNOWFLAKE_PASSWORD`, `SNOWFLAKE_WAREHOUSE`, `SNOWFLAKE_DATABASE`, `SNOWFLAKE_SCHEMA`.
 
 ## Commands
 
-All commands use `snowsql`. The connection is configured via `~/.snowsql/config` or environment variables.
-
-| Task | Command |
-|------|---------|
-| Run a query | `snowsql -q "SELECT …"` |
-| Run from file | `snowsql -f query.sql` |
-| List databases | `snowsql -q "SHOW DATABASES"` |
-| List schemas | `snowsql -q "SHOW SCHEMAS IN DATABASE <db>"` |
-| List tables | `snowsql -q "SHOW TABLES IN SCHEMA <db>.<schema>"` |
-| Describe table | `snowsql -q "DESCRIBE TABLE <db>.<schema>.<table>"` |
-| List warehouses | `snowsql -q "SHOW WAREHOUSES"` |
-| Resume warehouse | `snowsql -q "ALTER WAREHOUSE <wh> RESUME"` |
-| Suspend warehouse | `snowsql -q "ALTER WAREHOUSE <wh> SUSPEND"` |
-| Load from stage | `snowsql -q "COPY INTO <table> FROM @<stage>"` |
-| Upload to stage | `snowsql -q "PUT file://<path> @<stage>"` |
-
-### Output options
-
-| Flag | Effect |
-|------|--------|
-| `-o output_format=json` | JSON output |
-| `-o output_format=csv` | CSV output |
-| `-o header=false` | Suppress column headers |
-| `-o friendly=false` | Machine-readable output |
-
-## When to use
-
-- User asks about Snowflake data → `snowsql -q "SHOW TABLES IN …"`
-- User wants to query Snowflake → `snowsql -q "SELECT …"`
-- User asks about warehouse costs → `snowsql -q "SHOW WAREHOUSES"` + check credits
-- User wants to load data into Snowflake → `PUT` to stage, then `COPY INTO`
-- User wants to check schema → `snowsql -q "DESCRIBE TABLE …"`
-
-## Connection
-
-SnowSQL reads credentials from `~/.snowsql/config` or these environment variables:
-
-| Env var | Purpose |
-|---------|---------|
-| `SNOWSQL_ACCOUNT` | Account identifier (e.g. `xy12345.us-east-1`) |
-| `SNOWSQL_USER` | Username |
-| `SNOWSQL_PWD` | Password |
-| `SNOWSQL_DATABASE` | Default database |
-| `SNOWSQL_SCHEMA` | Default schema |
-| `SNOWSQL_WAREHOUSE` | Default warehouse |
-| `SNOWSQL_ROLE` | Default role |
-
-You can also pass connection params inline:
+### Execute SQL
 
 ```bash
-snowsql -a <account> -u <user> -d <database> -s <schema> -w <warehouse> -q "SELECT 1"
+snow sql -q "SELECT * FROM <database>.<schema>.<table> LIMIT 10"
 ```
 
-## Examples
+### List databases
 
 ```bash
-# Check connection
-snowsql -q "SELECT CURRENT_USER(), CURRENT_ROLE(), CURRENT_WAREHOUSE()"
-
-# Explore tables
-snowsql -q "SHOW TABLES IN SCHEMA analytics.public"
-snowsql -q "DESCRIBE TABLE analytics.public.orders"
-
-# Query with JSON output
-snowsql -q "SELECT * FROM orders LIMIT 5" -o output_format=json
-
-# Load a local CSV
-snowsql -q "PUT file://./data/sales.csv @my_stage"
-snowsql -q "COPY INTO sales FROM @my_stage FILE_FORMAT=(TYPE=CSV SKIP_HEADER=1)"
+snow sql -q "SHOW DATABASES"
 ```
 
-## Error recovery
+### List schemas
 
-| Problem | Fix |
-|---------|-----|
-| `snowsql: command not found` | Install: `brew install --cask snowflake-snowsql` or [download](https://docs.snowflake.com/en/user-guide/snowsql-install-config) |
-| Auth failure | Check `~/.snowsql/config` or `SNOWSQL_*` env vars |
-| Warehouse suspended | `snowsql -q "ALTER WAREHOUSE <wh> RESUME"` |
-| Database not found | `snowsql -q "SHOW DATABASES"` to see available databases |
+```bash
+snow sql -q "SHOW SCHEMAS IN DATABASE <database>"
+```
 
-## Notes
+### List tables
 
-- SnowSQL exits with code 1 on failure
-- Use `-o friendly=false -o header=false` for cleanest machine-parseable output
-- For large queries, write SQL to a file and use `snowsql -f file.sql`
-- Snowflake charges per-second for active warehouses — suspend when done
+```bash
+snow sql -q "SHOW TABLES IN <database>.<schema>"
+```
+
+### Describe a table
+
+```bash
+snow sql -q "DESCRIBE TABLE <database>.<schema>.<table>"
+```
+
+### Row count
+
+```bash
+snow sql -q "SELECT COUNT(*) FROM <database>.<schema>.<table>"
+```
+
+### Warehouse management
+
+#### List warehouses
+
+```bash
+snow sql -q "SHOW WAREHOUSES"
+```
+
+#### Resume a warehouse
+
+```bash
+snow sql -q "ALTER WAREHOUSE <warehouse> RESUME"
+```
+
+#### Suspend a warehouse
+
+```bash
+snow sql -q "ALTER WAREHOUSE <warehouse> SUSPEND"
+```
+
+#### Resize a warehouse
+
+```bash
+snow sql -q "ALTER WAREHOUSE <warehouse> SET WAREHOUSE_SIZE = 'MEDIUM'"
+```
+
+### Query history
+
+```bash
+snow sql -q "SELECT query_id, query_text, execution_status, total_elapsed_time/1000 AS seconds FROM TABLE(information_schema.query_history(dateadd('hours', -24, current_timestamp()), current_timestamp())) ORDER BY start_time DESC LIMIT 20"
+```
+
+### Storage usage
+
+```bash
+snow sql -q "SELECT table_catalog, table_schema, table_name, row_count, bytes/1024/1024 AS mb FROM information_schema.tables WHERE table_schema NOT IN ('INFORMATION_SCHEMA') ORDER BY bytes DESC NULLS LAST LIMIT 20"
+```
+
+### Load data from stage
+
+```bash
+snow sql -q "COPY INTO <table> FROM @<stage>/<path> FILE_FORMAT = (TYPE = 'CSV' SKIP_HEADER = 1)"
+```
+
+### Create a file format
+
+```bash
+snow sql -q "CREATE FILE FORMAT IF NOT EXISTS my_csv_format TYPE = 'CSV' FIELD_DELIMITER = ',' SKIP_HEADER = 1 FIELD_OPTIONALLY_ENCLOSED_BY = '\"'"
+```
+
+## Best Practices
+
+- Always set `AUTO_SUSPEND` on warehouses to avoid idle costs
+- Use appropriate warehouse sizes — start small, scale up as needed
+- Prefer `TRANSIENT` tables for staging/temporary data
+- Use clustering keys on large tables filtered by specific columns
+- Leverage Time Travel for recovering data (`AT`/`BEFORE` clauses)
+- Use roles and grants for access control, not individual user permissions
+- Monitor costs via `SNOWFLAKE.ACCOUNT_USAGE.WAREHOUSE_METERING_HISTORY`

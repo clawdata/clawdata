@@ -1,3 +1,0 @@
-# This folder contains CSV seed files that will be loaded into your database
-# Place your seed CSV files here and run 'dbt seed' to load them
-# Example: customers.csv, products.csv, etc.

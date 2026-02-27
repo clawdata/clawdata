@@ -1,0 +1,58 @@
+{#- Airflow DAG for running dbt -#}
+{#- Variables: dag_id, project_dir, profiles_dir, schedule, target, models (optional) -#}
+
+from datetime import datetime
+
+from airflow import DAG
+from airflow.operators.bash import BashOperator
+from airflow.operators.empty import EmptyOperator
+
+DBT_PROJECT_DIR = "{{ project_dir }}"
+DBT_PROFILES_DIR = "{{ profiles_dir | default('/home/airflow/.dbt') }}"
+DBT_TARGET = "{{ target | default('prod') }}"
+
+default_args = {
+    "owner": "data-team",
+    "depends_on_past": False,
+    "retries": 1,
+}
+
+with DAG(
+    dag_id="{{ dag_id }}",
+    description="Run dbt models",
+    schedule="{{ schedule | default('@daily') }}",
+    start_date=datetime(2026, 1, 1),
+    default_args=default_args,
+    catchup=False,
+    tags=["dbt", "data-engineering"],
+) as dag:
+
+    start = EmptyOperator(task_id="start")
+
+    dbt_deps = BashOperator(
+        task_id="dbt_deps",
+        bash_command=f"cd {DBT_PROJECT_DIR} && dbt deps --profiles-dir {DBT_PROFILES_DIR}",
+    )
+
+    dbt_run = BashOperator(
+        task_id="dbt_run",
+        bash_command=(
+            f"cd {DBT_PROJECT_DIR} && dbt run"
+            f" --profiles-dir {DBT_PROFILES_DIR}"
+            f" --target {DBT_TARGET}"
+            {% if models %}" --models {{ models }}"{% endif %}
+        ),
+    )
+
+    dbt_test = BashOperator(
+        task_id="dbt_test",
+        bash_command=(
+            f"cd {DBT_PROJECT_DIR} && dbt test"
+            f" --profiles-dir {DBT_PROFILES_DIR}"
+            f" --target {DBT_TARGET}"
+        ),
+    )
+
+    end = EmptyOperator(task_id="end")
+
+    start >> dbt_deps >> dbt_run >> dbt_test >> end

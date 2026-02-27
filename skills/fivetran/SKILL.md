@@ -1,47 +1,87 @@
 ---
 name: fivetran
-description: >
-  Managed connector skill for Fivetran and Airbyte — trigger syncs,
-  check status, and browse connectors.
-metadata:
-  openclaw:
-    requires:
-      bins: [clawdata]
-    primaryEnv: FIVETRAN_API_KEY
-    tags: [connectors, fivetran, airbyte, sync, ingestion]
+description: "Manage Fivetran connectors and syncs — list connectors, trigger syncs, check status, and manage schemas."
+metadata: {"openclaw": {"emoji": "🔗", "tags": ["ingestion", "fivetran", "etl", "connector", "sync", "data"]}}
 ---
 
-# Fivetran / Airbyte
+# Fivetran
 
-Managed connector skill for triggering and monitoring data syncs.
+You help manage Fivetran connectors and data syncs.
+Use this when the user asks about Fivetran connectors, sync status, or schema management.
 
-## Commands
+## Authentication
 
-| Task | Command |
-|------|---------|
-| List connectors | `clawdata fivetran connectors` |
-| Trigger sync | `clawdata fivetran sync <connector-id>` |
-| Sync status | `clawdata fivetran status <connector-id>` |
-| Connector details | `clawdata fivetran describe <connector-id>` |
-| Pause connector | `clawdata fivetran pause <connector-id>` |
-| Resume connector | `clawdata fivetran resume <connector-id>` |
+Fivetran uses API key + secret for authentication. Set these environment variables:
 
-## Configuration
+- `FIVETRAN_API_KEY`
+- `FIVETRAN_API_SECRET`
 
-### Fivetran
-```bash
-export FIVETRAN_API_KEY=your-api-key
-export FIVETRAN_API_SECRET=your-api-secret
+## API Patterns
+
+All Fivetran API calls use `web_fetch` with Basic Auth against `https://api.fivetran.com/v1`.
+
+### List all connectors in a group
+
+```
+GET https://api.fivetran.com/v1/groups/<group_id>/connectors
 ```
 
-### Airbyte
-```bash
-export AIRBYTE_API_URL=http://localhost:8000/api/v1
-export AIRBYTE_API_TOKEN=your-token
+### Get connector details
+
+```
+GET https://api.fivetran.com/v1/connectors/<connector_id>
 ```
 
-## When to use
+### Trigger a sync
 
-- User wants to trigger a data sync → `clawdata fivetran sync`
-- User asks about connector status → `clawdata fivetran status`
-- User needs to see what data sources are configured → `clawdata fivetran connectors`
+```
+POST https://api.fivetran.com/v1/connectors/<connector_id>/force
+```
+
+### Pause a connector
+
+```
+PATCH https://api.fivetran.com/v1/connectors/<connector_id>
+Body: {"paused": true}
+```
+
+### Resume a connector
+
+```
+PATCH https://api.fivetran.com/v1/connectors/<connector_id>
+Body: {"paused": false}
+```
+
+### Get sync status
+
+```
+GET https://api.fivetran.com/v1/connectors/<connector_id>/status
+```
+
+### List schemas and tables for a connector
+
+```
+GET https://api.fivetran.com/v1/connectors/<connector_id>/schemas
+```
+
+### Modify schema config (enable/disable tables)
+
+```
+PATCH https://api.fivetran.com/v1/connectors/<connector_id>/schemas
+Body: {"schemas": {"<schema>": {"tables": {"<table>": {"enabled": true}}}}}
+```
+
+## Common Tasks
+
+- **Check why data is stale**: Get connector status, check `succeeded_at` and `failed_at` timestamps
+- **Enable a new table**: Modify the schema config to enable the table
+- **Troubleshoot failures**: Check connector status for error messages
+- **Manage sync frequency**: Update connector config with desired `sync_frequency` (minutes)
+
+## Best Practices
+
+- Use Fivetran for source ingestion (EL), then dbt for transformation (T)
+- Monitor `succeeded_at` timestamps for freshness
+- Disable unused tables/schemas to reduce sync time and cost
+- Use column hashing for PII columns
+- Set up Fivetran-dbt integration for automatic model triggering after syncs

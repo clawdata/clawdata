@@ -1,61 +1,132 @@
 ---
 name: metabase
-description: >
-  BI skill for Metabase and Apache Superset — create questions,
-  refresh dashboards, and export charts.
-metadata:
-  openclaw:
-    requires:
-      bins: [clawdata]
-    primaryEnv: METABASE_URL
-    tags: [bi, metabase, superset, dashboards, charts, reporting]
+description: "Manage Metabase dashboards and questions — create questions, manage collections, and interact with the Metabase API."
+metadata: {"openclaw": {"emoji": "📊", "tags": ["bi", "metabase", "dashboard", "analytics", "visualization", "data"]}}
 ---
 
-# Metabase / Superset
+# Metabase
 
-BI skill for managing dashboards and questions in Metabase or Apache Superset.
+You help manage Metabase instances and create analytics content.
+Use this when the user asks about dashboards, questions, collections, or Metabase configuration.
 
-## Commands
+## Authentication
 
-| Task | Command |
-|------|---------|
-| List dashboards | `clawdata bi dashboards` |
-| View dashboard | `clawdata bi dashboard <id>` |
-| List questions | `clawdata bi questions` |
-| Run question | `clawdata bi question <id>` |
-| Refresh dashboard | `clawdata bi refresh <dashboard-id>` |
-| Export chart | `clawdata bi export <question-id> --format png` |
+Metabase uses session tokens. Set these environment variables:
 
-## Configuration
+- `METABASE_URL` — e.g. `http://localhost:3000`
+- `METABASE_USERNAME`
+- `METABASE_PASSWORD`
 
-### Metabase
-```bash
-export METABASE_URL=http://localhost:3000
-export METABASE_API_KEY=your-api-key
+First, obtain a session token:
+
+```
+POST <METABASE_URL>/api/session
+Body: {"username": "<email>", "password": "<password>"}
 ```
 
-### Superset
-```bash
-export SUPERSET_URL=http://localhost:8088
-export SUPERSET_API_TOKEN=your-token
+Use the returned `id` as `X-Metabase-Session` header for subsequent requests.
+
+## API Patterns
+
+### Databases
+
+#### List connected databases
+
+```
+GET /api/database
 ```
 
-## When to use
+#### Get database metadata (tables and fields)
 
-- User asks about dashboards → `clawdata bi dashboards`
-- User wants to refresh data in a dashboard → `clawdata bi refresh`
-- User needs to export a chart → `clawdata bi export`
-
-## Integration
-
-Wire dashboards as dbt exposures so lineage is visible:
-
-```yaml
-# schema.yml
-exposures:
-  - name: revenue_dashboard
-    type: dashboard
-    url: http://localhost:3000/dashboard/1
-    depends_on:
-      - ref('gld_revenue_summary')
 ```
+GET /api/database/<id>/metadata
+```
+
+### Questions (Saved Questions)
+
+#### List questions
+
+```
+GET /api/card
+```
+
+#### Get a question
+
+```
+GET /api/card/<id>
+```
+
+#### Create a native query question
+
+```
+POST /api/card
+Body: {
+  "name": "Monthly Revenue",
+  "dataset_query": {
+    "type": "native",
+    "native": {"query": "SELECT date_trunc('month', created_at) AS month, SUM(amount) AS revenue FROM orders GROUP BY 1 ORDER BY 1"},
+    "database": 1
+  },
+  "display": "line",
+  "visualization_settings": {},
+  "collection_id": null
+}
+```
+
+#### Run a question
+
+```
+POST /api/card/<id>/query
+```
+
+### Dashboards
+
+#### List dashboards
+
+```
+GET /api/dashboard
+```
+
+#### Get a dashboard
+
+```
+GET /api/dashboard/<id>
+```
+
+#### Create a dashboard
+
+```
+POST /api/dashboard
+Body: {"name": "Sales Overview", "collection_id": null}
+```
+
+#### Add a card to a dashboard
+
+```
+PUT /api/dashboard/<dashboard_id>
+Body: {"dashcards": [{"card_id": <card_id>, "row": 0, "col": 0, "size_x": 6, "size_y": 4}]}
+```
+
+### Collections
+
+#### List collections
+
+```
+GET /api/collection
+```
+
+#### Create a collection
+
+```
+POST /api/collection
+Body: {"name": "Finance", "parent_id": null}
+```
+
+## Best Practices
+
+- Organise questions into collections by domain (e.g. Finance, Marketing)
+- Use native queries for complex analytics, simple questions for self-serve
+- Add descriptions to questions and dashboards
+- Use dashboard filters for interactivity
+- Cache slow queries with Metabase's caching settings
+- Pin important dashboards to collections for discoverability

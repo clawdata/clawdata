@@ -1,0 +1,21 @@
+{#- dbt staging model template -#}
+{#- Variables: source_name, table_name, columns (list of dicts: name, type, description) -#}
+
+with source as (
+
+    select * from {{ '{{' }} source('{{ source_name }}', '{{ table_name }}') {{ '}}' }}
+
+),
+
+renamed as (
+
+    select
+        {%- for col in columns %}
+        {{ col.name }}{% if not loop.last %},{% endif %}
+        {%- endfor %}
+
+    from source
+
+)
+
+select * from renamed

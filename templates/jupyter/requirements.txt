@@ -1,6 +1,0 @@
-jupyterlab>=4.0.0
-duckdb>=0.10.0
-pandas>=2.0.0
-matplotlib>=3.7.0
-plotly>=5.15.0
-ipywidgets>=8.0.0

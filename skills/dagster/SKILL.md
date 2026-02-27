@@ -1,67 +1,105 @@
 ---
 name: dagster
-description: >
-  Asset-based orchestration with Dagster — define data assets, sensors,
-  and schedules for pipeline management.
-metadata:
-  openclaw:
-    requires:
-      bins: [clawdata]
-    primaryEnv: DAGSTER_HOME
-    tags: [orchestration, dagster, assets, pipeline, scheduler]
+description: "Build and manage Dagster data pipelines — create assets, jobs, schedules, sensors, and resources."
+metadata: {"openclaw": {"emoji": "🗡️", "requires": {"bins": ["dagster"]}, "tags": ["orchestration", "dagster", "pipeline", "etl", "data"]}}
 ---
 
 # Dagster
 
-Alternative orchestrator skill using [Dagster](https://dagster.io/) for
-asset-based pipeline management.
+You help build and manage Dagster data pipelines using the **`dagster`** CLI.
+Use this when the user wants to create assets, jobs, schedules, or manage Dagster projects.
+
+## Project Structure
+
+A typical Dagster project:
+
+```
+my_project/
+├── my_project/
+│   ├── __init__.py
+│   ├── assets/
+│   │   ├── __init__.py
+│   │   ├── ingestion.py
+│   │   └── transformations.py
+│   ├── resources/
+│   │   └── __init__.py
+│   ├── jobs.py
+│   ├── schedules.py
+│   └── sensors.py
+├── pyproject.toml
+└── setup.py
+```
 
 ## Commands
 
-| Task | Command |
-|------|---------|
-| Start Dagster UI | `clawdata dagster dev` |
-| Run all assets | `clawdata dagster materialize --all` |
-| Run specific asset | `clawdata dagster materialize <asset>` |
-| Check asset status | `clawdata dagster status` |
-| Run sensor check | `clawdata dagster sensor tick <name>` |
+### Create a new project
 
-## Asset Definitions
-
-```python
-# assets.py
-from dagster import asset, AssetExecutionContext
-import duckdb
-
-@asset(group_name="bronze")
-def raw_customers(context: AssetExecutionContext):
-    """Ingest customer CSV into DuckDB."""
-    con = duckdb.connect("data/warehouse.duckdb")
-    con.execute("CREATE OR REPLACE TABLE raw_customers AS SELECT * FROM read_csv_auto('data/sample/sample_customers.csv')")
-    context.log.info("Loaded raw_customers")
-
-@asset(group_name="silver", deps=[raw_customers])
-def slv_customers(context: AssetExecutionContext):
-    """Clean and deduplicate customers."""
-    con = duckdb.connect("data/warehouse.duckdb")
-    con.execute("CREATE OR REPLACE TABLE slv_customers AS SELECT DISTINCT * FROM raw_customers")
-    context.log.info("Created slv_customers")
+```bash
+dagster project scaffold --name my_project
 ```
 
-## When to use
+### Start the development UI
 
-- Team prefers asset-based orchestration over DAG-based → Dagster
-- Need software-defined assets with automatic lineage → Dagster
-- Want built-in asset catalog and observability → Dagster UI
+```bash
+dagster dev -f my_project/__init__.py
+```
 
-## Integration
+### Run a job
 
-Dagster works alongside dbt via `dagster-dbt`:
+```bash
+dagster job execute -f my_project/__init__.py -j my_job
+```
+
+### Materialise assets
+
+```bash
+dagster asset materialize --select my_asset -f my_project/__init__.py
+```
+
+### Check definitions
+
+```bash
+dagster definitions validate -f my_project/__init__.py
+```
+
+## Asset Patterns
+
+### Basic software-defined asset
 
 ```python
-from dagster_dbt import DbtCliResource, dbt_assets
+from dagster import asset
 
-@dbt_assets(manifest=dbt_manifest_path)
-def clawdata_dbt_assets(context, dbt: DbtCliResource):
-    yield from dbt.cli(["build"], context=context).stream()
+@asset
+def raw_orders():
+    """Ingest raw orders from source."""
+    ...
 ```
+
+### Asset with dependencies
+
+```python
+@asset(deps=[raw_orders])
+def cleaned_orders(raw_orders):
+    """Clean and validate orders."""
+    ...
+```
+
+### Partitioned asset
+
+```python
+from dagster import asset, DailyPartitionsDefinition
+
+@asset(partitions_def=DailyPartitionsDefinition(start_date="2024-01-01"))
+def daily_metrics(context):
+    partition_date = context.partition_key
+    ...
+```
+
+## Best Practices
+
+- Prefer software-defined assets over ops/jobs for data pipelines
+- Use `@asset` with type annotations and docstrings
+- Define resources (database connections, API clients) separately
+- Use partition definitions for incremental processing
+- Add metadata and descriptions for observability
+- Group related assets with `@asset(group_name="...")`

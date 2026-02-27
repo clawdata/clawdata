@@ -1,6 +1,0 @@
-order_status,description,is_terminal
-pending,Order placed but not yet processed,false
-shipped,Order dispatched to carrier,false
-completed,Order delivered to customer,true
-refunded,Payment returned to customer,true
-cancelled,Order cancelled before shipment,true

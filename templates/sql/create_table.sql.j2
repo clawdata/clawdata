@@ -1,0 +1,11 @@
+{#- CREATE TABLE template -#}
+{#- Variables: schema, table_name, columns (list of dicts: name, type, nullable, default), primary_key -#}
+
+CREATE TABLE IF NOT EXISTS {{ schema }}.{{ table_name }} (
+    {%- for col in columns %}
+    {{ col.name }} {{ col.type }}{% if not col.nullable | default(true) %} NOT NULL{% endif %}{% if col.default is defined %} DEFAULT {{ col.default }}{% endif %}{% if not loop.last %},{% endif %}
+    {%- endfor %}
+    {%- if primary_key %},
+    PRIMARY KEY ({{ primary_key | join(', ') }})
+    {%- endif %}
+);

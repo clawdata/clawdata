@@ -1,0 +1,50 @@
+{#- Basic Airflow DAG template -#}
+{#- Variables: dag_id, description, schedule, owner, start_date, tasks (list of dicts: id, operator, params) -#}
+
+from datetime import datetime
+
+from airflow import DAG
+from airflow.operators.empty import EmptyOperator
+{%- if tasks %}
+from airflow.operators.python import PythonOperator
+from airflow.operators.bash import BashOperator
+{%- endif %}
+
+default_args = {
+    "owner": "{{ owner | default('data-team') }}",
+    "depends_on_past": False,
+    "retries": 1,
+}
+
+with DAG(
+    dag_id="{{ dag_id }}",
+    description="{{ description }}",
+    schedule="{{ schedule | default('@daily') }}",
+    start_date=datetime({{ start_date | default('2026, 1, 1') }}),
+    default_args=default_args,
+    catchup=False,
+    tags=["data-engineering"],
+) as dag:
+
+    start = EmptyOperator(task_id="start")
+    end = EmptyOperator(task_id="end")
+
+    {%- for task in tasks %}
+
+    {{ task.id }} = {{ task.operator }}(
+        task_id="{{ task.id }}",
+        {%- for key, value in task.params.items() %}
+        {{ key }}={{ value }},
+        {%- endfor %}
+    )
+    {%- endfor %}
+
+    {% if tasks %}
+    start >> {{ tasks[0].id }}
+    {%- for i in range(1, tasks | length) %}
+    {{ tasks[i-1].id }} >> {{ tasks[i].id }}
+    {%- endfor %}
+    {{ tasks[-1].id }} >> end
+    {%- else %}
+    start >> end
+    {%- endif %}

@@ -1,0 +1,41 @@
+{#- SCD Type 2 MERGE template -#}
+{#- Variables: target_schema, target_table, source_schema, source_table, business_keys (list), tracked_columns (list), surrogate_key -#}
+
+MERGE INTO {{ target_schema }}.{{ target_table }} AS target
+USING {{ source_schema }}.{{ source_table }} AS source
+ON  {% for bk in business_keys %}target.{{ bk }} = source.{{ bk }}{% if not loop.last %} AND {% endif %}{% endfor %}
+    AND target.is_current = TRUE
+
+-- Update existing records (close the old version)
+WHEN MATCHED AND (
+    {%- for col in tracked_columns %}
+    target.{{ col }} != source.{{ col }}{% if not loop.last %} OR{% endif %}
+    {%- endfor %}
+) THEN UPDATE SET
+    is_current = FALSE,
+    valid_to = CURRENT_TIMESTAMP
+
+-- Insert new records
+WHEN NOT MATCHED THEN INSERT (
+    {{ surrogate_key }},
+    {%- for bk in business_keys %}
+    {{ bk }},
+    {%- endfor %}
+    {%- for col in tracked_columns %}
+    {{ col }},
+    {%- endfor %}
+    valid_from,
+    valid_to,
+    is_current
+) VALUES (
+    {{ '{{' }} generate_surrogate_key() {{ '}}' }},
+    {%- for bk in business_keys %}
+    source.{{ bk }},
+    {%- endfor %}
+    {%- for col in tracked_columns %}
+    source.{{ col }},
+    {%- endfor %}
+    CURRENT_TIMESTAMP,
+    NULL,
+    TRUE
+);
