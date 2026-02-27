@@ -1,7 +1,7 @@
 # ClawData
 
 <p align="center">
-  <img src="web/public/assets/shell.png" alt="ClawData" width="120" />
+  <img src="web/public/assets/shell.svg" alt="ClawData" width="120" />
 </p>
 
 An easy-to-use dashboard and FastAPI backend for managing [OpenClaw](https://docs.openclaw.ai/) agents built for data teams. Spin up agents that understand your pipelines, query your warehouses, generate dbt models, review SQL, and more — all from one UI instead of the command line. Built for data engineers and analysts who want AI assistance without leaving their stack.
