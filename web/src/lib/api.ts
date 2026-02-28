@@ -443,6 +443,27 @@ export interface TemplateSyncResult {
   message: string;
 }
 
+// File tree types for live browsing
+export interface FileTreeEntry {
+  name: string;
+  path: string;
+  type: "file" | "folder";
+  size?: number;
+  children?: FileTreeEntry[];
+}
+
+export interface BrowseResponse {
+  root: string;
+  tree: FileTreeEntry[];
+}
+
+export interface FileContentResponse {
+  path: string;
+  name: string;
+  content: string;
+  size: number;
+}
+
 // Templates
 export const templateApi = {
   list: () => api<Template[]>("/api/templates/"),
@@ -466,6 +487,9 @@ export const templateApi = {
     }),
   sync: () =>
     api<TemplateSyncResult>("/api/templates/sync", { method: "POST" }),
+  browse: () => api<BrowseResponse>("/api/templates/browse"),
+  readFile: (path: string) =>
+    api<FileContentResponse>(`/api/templates/browse/file?path=${encodeURIComponent(path)}`),
 };
 
 // Lifecycle
