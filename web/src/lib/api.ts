@@ -437,6 +437,12 @@ export const skillApi = {
     api<void>(`/api/skills/${id}`, { method: "DELETE" }),
 };
 
+export interface TemplateSyncResult {
+  created: string[];
+  updated: string[];
+  message: string;
+}
+
 // Templates
 export const templateApi = {
   list: () => api<Template[]>("/api/templates/"),
@@ -458,6 +464,8 @@ export const templateApi = {
       method: "POST",
       body: JSON.stringify({ variables }),
     }),
+  sync: () =>
+    api<TemplateSyncResult>("/api/templates/sync", { method: "POST" }),
 };
 
 // Lifecycle
