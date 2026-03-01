@@ -1,0 +1,178 @@
+[
+  {
+    "sku": "SKU-001",
+    "product_name": "Wireless Mouse",
+    "category": "Electronics",
+    "subcategory": "Peripherals",
+    "unit_price": "29.99",
+    "cost_price": "12.50",
+    "weight_kg": "0.15",
+    "created_date": "2023-01-10",
+    "is_active": "1"
+  },
+  {
+    "sku": "SKU-002",
+    "product_name": "Mechanical Keyboard",
+    "category": "Electronics",
+    "subcategory": "Peripherals",
+    "unit_price": "89.99",
+    "cost_price": "42.00",
+    "weight_kg": "0.85",
+    "created_date": "2023-01-10",
+    "is_active": "1"
+  },
+  {
+    "sku": "SKU-003",
+    "product_name": "USB-C Hub 7-Port",
+    "category": "Electronics",
+    "subcategory": "Accessories",
+    "unit_price": "49.99",
+    "cost_price": "22.00",
+    "weight_kg": "0.20",
+    "created_date": "2023-02-15",
+    "is_active": "1"
+  },
+  {
+    "sku": "SKU-004",
+    "product_name": "27\" 4K Monitor",
+    "category": "Electronics",
+    "subcategory": "Displays",
+    "unit_price": "449.99",
+    "cost_price": "285.00",
+    "weight_kg": "6.50",
+    "created_date": "2023-02-15",
+    "is_active": "1"
+  },
+  {
+    "sku": "SKU-005",
+    "product_name": "Laptop Stand",
+    "category": "Office",
+    "subcategory": "Furniture",
+    "unit_price": "39.99",
+    "cost_price": "15.00",
+    "weight_kg": "1.20",
+    "created_date": "2023-03-01",
+    "is_active": "1"
+  },
+  {
+    "sku": "SKU-006",
+    "product_name": "Ergonomic Chair",
+    "category": "Office",
+    "subcategory": "Furniture",
+    "unit_price": "599.99",
+    "cost_price": "310.00",
+    "weight_kg": "18.00",
+    "created_date": "2023-03-01",
+    "is_active": "1"
+  },
+  {
+    "sku": "SKU-007",
+    "product_name": "Standing Desk Mat",
+    "category": "Office",
+    "subcategory": "Accessories",
+    "unit_price": "34.99",
+    "cost_price": "14.00",
+    "weight_kg": "1.80",
+    "created_date": "2023-04-10",
+    "is_active": "1"
+  },
+  {
+    "sku": "SKU-008",
+    "product_name": "Webcam HD 1080p",
+    "category": "Electronics",
+    "subcategory": "Peripherals",
+    "unit_price": "69.99",
+    "cost_price": "28.00",
+    "weight_kg": "0.12",
+    "created_date": "2023-04-10",
+    "is_active": "1"
+  },
+  {
+    "sku": "SKU-009",
+    "product_name": "Noise-Cancel Headphones",
+    "category": "Electronics",
+    "subcategory": "Audio",
+    "unit_price": "199.99",
+    "cost_price": "95.00",
+    "weight_kg": "0.30",
+    "created_date": "2023-05-20",
+    "is_active": "1"
+  },
+  {
+    "sku": "SKU-010",
+    "product_name": "Desk Lamp LED",
+    "category": "Office",
+    "subcategory": "Lighting",
+    "unit_price": "44.99",
+    "cost_price": "18.00",
+    "weight_kg": "1.10",
+    "created_date": "2023-05-20",
+    "is_active": "1"
+  },
+  {
+    "sku": "SKU-011",
+    "product_name": "Cable Management Kit",
+    "category": "Office",
+    "subcategory": "Accessories",
+    "unit_price": "19.99",
+    "cost_price": "6.50",
+    "weight_kg": "0.40",
+    "created_date": "2023-06-15",
+    "is_active": "1"
+  },
+  {
+    "sku": "SKU-012",
+    "product_name": "Portable SSD 1TB",
+    "category": "Electronics",
+    "subcategory": "Storage",
+    "unit_price": "109.99",
+    "cost_price": "65.00",
+    "weight_kg": "0.05",
+    "created_date": "2023-06-15",
+    "is_active": "1"
+  },
+  {
+    "sku": "SKU-013",
+    "product_name": "Whiteboard 36x24",
+    "category": "Office",
+    "subcategory": "Supplies",
+    "unit_price": "54.99",
+    "cost_price": "22.00",
+    "weight_kg": "3.20",
+    "created_date": "2023-07-01",
+    "is_active": "1"
+  },
+  {
+    "sku": "SKU-014",
+    "product_name": "Webcam 4K Pro",
+    "category": "Electronics",
+    "subcategory": "Peripherals",
+    "unit_price": "149.99",
+    "cost_price": "72.00",
+    "weight_kg": "0.18",
+    "created_date": "2023-08-01",
+    "is_active": "1"
+  },
+  {
+    "sku": "SKU-015",
+    "product_name": "Bluetooth Speaker",
+    "category": "Electronics",
+    "subcategory": "Audio",
+    "unit_price": "79.99",
+    "cost_price": "35.00",
+    "weight_kg": "0.55",
+    "created_date": "2023-08-01",
+    "is_active": "1"
+  },
+  {
+    "sku": "SKU-016",
+    "product_name": "Old USB Hub 4-Port",
+    "category": "Electronics",
+    "subcategory": "Accessories",
+    "unit_price": "24.99",
+    "cost_price": "10.00",
+    "weight_kg": "0.12",
+    "created_date": "2022-03-01",
+    "is_active": "0"
+  }
+]

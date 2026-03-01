@@ -1,5 +1,9 @@
-{#- dbt intermediate model template -#}
-{#- Variables: model_name, description, upstream_models (list), join_key -#}
+{#---
+name: Intermediate Model
+description: Generate a dbt intermediate model that joins multiple upstream models on a shared key.
+category: dbt
+variables: model_name, description, upstream_models, join_key
+---#}
 
 with
 {%- for upstream in upstream_models %}

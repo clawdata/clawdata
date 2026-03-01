@@ -7,6 +7,7 @@ import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { Check, Copy } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ChartRenderer } from "./chart-renderer";
 
 interface MarkdownContentProps {
   content: string;
@@ -15,7 +16,7 @@ interface MarkdownContentProps {
 
 /**
  * Renders a markdown string with GFM support, syntax‑highlighted code blocks,
- * and a copy button on fenced code.
+ * a copy button on fenced code, inline chart rendering, and SVG support.
  */
 export const MarkdownContent = memo(function MarkdownContent({
   content,
@@ -37,10 +38,21 @@ export const MarkdownContent = memo(function MarkdownContent({
           code({ className: codeClass, children, ...rest }: any) {
             const match = /language-(\w+)/.exec(codeClass || "");
             const codeString = String(children).replace(/\n$/, "");
+            const language = match?.[1] || "";
+
+            // Chart blocks → render interactive chart
+            if (language === "chart") {
+              return <ChartRenderer spec={codeString} />;
+            }
+
+            // SVG blocks → render inline SVG
+            if (language === "svg") {
+              return <SvgRenderer svg={codeString} />;
+            }
 
             if (match) {
               return (
-                <CodeBlock language={match[1]} code={codeString} />
+                <CodeBlock language={language} code={codeString} />
               );
             }
 
@@ -53,21 +65,31 @@ export const MarkdownContent = memo(function MarkdownContent({
           // Style tables nicely
           table({ children }) {
             return (
-              <div className="my-2 overflow-x-auto rounded border">
+              <div className="my-2 overflow-x-auto rounded-lg border">
                 <table className="min-w-full text-xs">{children}</table>
               </div>
             );
           },
+          thead({ children }) {
+            return (
+              <thead className="bg-muted/50">{children}</thead>
+            );
+          },
           th({ children }) {
             return (
-              <th className="border-b bg-muted px-3 py-1.5 text-left text-xs font-medium">
+              <th className="border-b bg-muted px-3 py-1.5 text-left text-xs font-semibold">
                 {children}
               </th>
             );
           },
           td({ children }) {
             return (
-              <td className="border-b px-3 py-1.5 text-xs">{children}</td>
+              <td className="border-b px-3 py-1.5 text-xs tabular-nums">{children}</td>
+            );
+          },
+          tr({ children }) {
+            return (
+              <tr className="transition-colors hover:bg-muted/30">{children}</tr>
             );
           },
           // Links open in new tab
@@ -86,6 +108,41 @@ export const MarkdownContent = memo(function MarkdownContent({
           // Prevent prose from adding excessive spacing on paragraphs
           p({ children }) {
             return <p className="my-1 leading-relaxed">{children}</p>;
+          },
+          // Better list styling
+          ul({ children }) {
+            return <ul className="my-1 ml-4 list-disc space-y-0.5">{children}</ul>;
+          },
+          ol({ children }) {
+            return <ol className="my-1 ml-4 list-decimal space-y-0.5">{children}</ol>;
+          },
+          li({ children }) {
+            return <li className="text-sm leading-relaxed">{children}</li>;
+          },
+          // Styled blockquotes for insights / callouts
+          blockquote({ children }) {
+            return (
+              <blockquote className="my-2 border-l-4 border-primary/40 bg-primary/5 pl-3 py-1 text-sm italic">
+                {children}
+              </blockquote>
+            );
+          },
+          // Better heading styles inside chat
+          h1({ children }) {
+            return <h1 className="mt-3 mb-1 text-lg font-bold">{children}</h1>;
+          },
+          h2({ children }) {
+            return <h2 className="mt-3 mb-1 text-base font-bold">{children}</h2>;
+          },
+          h3({ children }) {
+            return <h3 className="mt-2 mb-1 text-sm font-semibold">{children}</h3>;
+          },
+          h4({ children }) {
+            return <h4 className="mt-2 mb-0.5 text-sm font-semibold text-muted-foreground">{children}</h4>;
+          },
+          // Horizontal rule as a visual separator
+          hr() {
+            return <hr className="my-3 border-t border-border" />;
           },
         }}
       >
@@ -139,6 +196,26 @@ function CodeBlock({ language, code }: { language: string; code: string }) {
         {code}
       </SyntaxHighlighter>
     </div>
+  );
+}
+
+/* ── SVG renderer ────────────────────────────────────────────────── */
+
+function SvgRenderer({ svg }: { svg: string }) {
+  // Sanitise: only allow actual SVG content
+  if (!svg.trim().startsWith("<svg") && !svg.trim().startsWith("<?xml")) {
+    return (
+      <div className="my-2 rounded-lg border border-destructive/50 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+        Invalid SVG content
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="my-3 flex justify-center overflow-x-auto rounded-lg border bg-card p-4 [&_svg]:max-w-full [&_svg]:h-auto"
+      dangerouslySetInnerHTML={{ __html: svg }}
+    />
   );
 }
 

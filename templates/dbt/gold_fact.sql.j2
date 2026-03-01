@@ -1,0 +1,51 @@
+{#---
+name: Gold Fact Model
+description: Generate a dbt gold-layer fact model. Joins silver-layer data with dimension keys and computes measures, producing a star-schema fact table.
+category: dbt
+variables: model_name, source_model, grain_keys, dimension_joins, measures, description
+---#}
+
+with source as (
+
+    select * from {{ '{{' }} ref('{{ source_model }}') {{ '}}' }}
+
+),
+
+{%- for dim in dimension_joins %}
+{{ dim.alias }} as (
+    select * from {{ '{{' }} ref('{{ dim.model }}') {{ '}}' }}
+),
+{%- endfor %}
+
+joined as (
+
+    select
+        {%- for key in grain_keys %}
+        source.{{ key }},
+        {%- endfor %}
+        {%- for dim in dimension_joins %}
+        {{ dim.alias }}.{{ dim.model }}_key as {{ dim.alias }}_key,
+        {%- endfor %}
+        {%- for measure in measures %}
+        {{ measure.expression }} as {{ measure.name }}{% if not loop.last %},{% endif %}
+        {%- endfor %}
+
+    from source
+    {%- for dim in dimension_joins %}
+    left join {{ dim.alias }}
+        on source.{{ dim.foreign_key }} = {{ dim.alias }}.{{ dim.natural_key }}
+    {%- endfor %}
+
+),
+
+final as (
+
+    select
+        {{ '{{' }} dbt_utils.generate_surrogate_key([{%- for key in grain_keys %}'{{ key }}'{% if not loop.last %}, {% endif %}{%- endfor %}]) {{ '}}' }} as {{ model_name }}_key,
+        *
+
+    from joined
+
+)
+
+select * from final

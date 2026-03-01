@@ -1,0 +1,80 @@
+{#---
+name: Silver Model - Type 2 SCD
+description: Generate a dbt silver model implementing Type 2 Slowly Changing Dimension (historical tracking). Creates versioned records with valid_from/valid_to date ranges and an is_current flag.
+category: dbt
+variables: model_name, source_model, primary_key, columns, updated_at_column, tracked_columns
+---#}
+
+{#- Uses dbt snapshots pattern for Type 2 SCD tracking -#}
+
+{{ '{{' }} config(
+    materialized='incremental',
+    unique_key='{{ primary_key }}_surrogate',
+    on_schema_change='sync_all_columns'
+) {{ '}}' }}
+
+with source as (
+
+    select * from {{ '{{' }} ref('{{ source_model }}') {{ '}}' }}
+
+),
+
+{% raw %}{% if is_incremental() %}{% endraw %}
+
+existing as (
+
+    select * from {{ '{{' }} this {{ '}}' }}
+    where is_current = true
+
+),
+
+changes as (
+
+    select
+        source.*
+    from source
+    inner join existing
+        on source.{{ primary_key }} = existing.{{ primary_key }}
+    where (
+        {%- for col in tracked_columns %}
+        source.{{ col }} != existing.{{ col }}{% if not loop.last %} or{% endif %}
+        {%- endfor %}
+    )
+
+),
+
+{% raw %}{% endif %}{% endraw %}
+
+versioned as (
+
+    select
+        {{ '{{' }} dbt_utils.generate_surrogate_key(['{{ primary_key }}', '{{ updated_at_column }}']) {{ '}}' }} as {{ primary_key }}_surrogate,
+        {%- for col in columns %}
+        {%- if col.transform is defined %}
+        {{ col.transform }} as {{ col.name }},
+        {%- else %}
+        {{ col.name }},
+        {%- endif %}
+        {%- endfor %}
+        {{ updated_at_column }} as valid_from,
+        lead({{ updated_at_column }}) over (
+            partition by {{ primary_key }}
+            order by {{ updated_at_column }}
+        ) as valid_to,
+        case
+            when lead({{ updated_at_column }}) over (
+                partition by {{ primary_key }}
+                order by {{ updated_at_column }}
+            ) is null then true
+            else false
+        end as is_current
+
+{% raw %}{% if is_incremental() %}{% endraw %}
+    from changes
+{% raw %}{% else %}{% endraw %}
+    from source
+{% raw %}{% endif %}{% endraw %}
+
+)
+
+select * from versioned

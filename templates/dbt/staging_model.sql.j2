@@ -1,5 +1,9 @@
-{#- dbt staging model template -#}
-{#- Variables: source_name, table_name, columns (list of dicts: name, type, description) -#}
+{#---
+name: Staging Model
+description: Generate a dbt staging model that selects from a source table and renames columns for downstream use.
+category: dbt
+variables: source_name, table_name, columns
+---#}
 
 with source as (
 

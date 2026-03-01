@@ -1,5 +1,9 @@
-{#- Airflow ELT DAG template -#}
-{#- Variables: dag_id, source_system, destination_schema, schedule, extract_command, load_command -#}
+{#---
+name: ELT Pipeline DAG
+description: Generate an Airflow ELT DAG with extract, load, transform, and test stages.
+category: airflow
+variables: dag_id, source_system, destination_schema, schedule, extract_command, load_command
+---#}
 
 from datetime import datetime
 

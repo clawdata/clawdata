@@ -92,6 +92,18 @@ async def lifespan(app: FastAPI):
     # Startup
     await init_db()
 
+    # ── Sync disk templates into DB ──────────────────────────────
+    try:
+        from app.database import async_session
+        from app.services.template_service import sync_templates_from_disk
+        async with async_session() as session:
+            result = await sync_templates_from_disk(session)
+            if result["created"] or result["updated"]:
+                logger.info("Template sync: %d created, %d updated",
+                            len(result["created"]), len(result["updated"]))
+    except Exception as exc:
+        logger.warning("Template disk sync failed (non-fatal): %s", exc)
+
     # ── OpenClaw bootstrap ───────────────────────────────────────
     # 1. Check if openclaw binary exists
     prereqs = await openclaw_lifecycle.check_prerequisites()

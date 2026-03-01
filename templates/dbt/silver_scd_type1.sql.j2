@@ -1,0 +1,45 @@
+{#---
+name: Silver Model - Type 1 SCD
+description: Generate a dbt silver model implementing Type 1 Slowly Changing Dimension (overwrite). Normalises and deduplicates bronze data, keeping only the latest version of each record.
+category: dbt
+variables: model_name, source_model, primary_key, columns, updated_at_column
+---#}
+
+with source as (
+
+    select * from {{ '{{' }} ref('{{ source_model }}') {{ '}}' }}
+
+),
+
+deduplicated as (
+
+    select
+        {%- for col in columns %}
+        {{ col.name }},
+        {%- endfor %}
+        row_number() over (
+            partition by {{ primary_key }}
+            order by {{ updated_at_column }} desc
+        ) as _row_num
+
+    from source
+
+),
+
+final as (
+
+    select
+        {%- for col in columns %}
+        {%- if col.transform is defined %}
+        {{ col.transform }} as {{ col.name }}{% if not loop.last %},{% endif %}
+        {%- else %}
+        {{ col.name }}{% if not loop.last %},{% endif %}
+        {%- endif %}
+        {%- endfor %}
+
+    from deduplicated
+    where _row_num = 1
+
+)
+
+select * from final

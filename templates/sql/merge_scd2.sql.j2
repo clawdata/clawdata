@@ -1,5 +1,9 @@
-{#- SCD Type 2 MERGE template -#}
-{#- Variables: target_schema, target_table, source_schema, source_table, business_keys (list), tracked_columns (list), surrogate_key -#}
+{#---
+name: SCD Type 2 Merge
+description: Generate a MERGE statement implementing Slowly Changing Dimension Type 2 with validity tracking.
+category: sql
+variables: target_schema, target_table, source_schema, source_table, business_keys, tracked_columns, surrogate_key
+---#}
 
 MERGE INTO {{ target_schema }}.{{ target_table }} AS target
 USING {{ source_schema }}.{{ source_table }} AS source

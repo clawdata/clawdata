@@ -1,0 +1,50 @@
+{#---
+name: Semantic Model YAML
+description: Generate a dbt semantic model definition that joins gold-layer facts and dimensions. Defines entities, dimensions, and measures for the dbt Semantic Layer (MetricFlow).
+category: dbt
+variables: model_name, description, model_ref, primary_entity, entities, dimensions, measures
+---#}
+
+semantic_models:
+  - name: {{ model_name }}
+    description: "{{ description }}"
+    model: ref('{{ model_ref }}')
+    defaults:
+      agg_time_dimension: {{ dimensions[0].name if dimensions | selectattr('type', 'equalto', 'time') | list else dimensions[0].name }}
+
+    entities:
+      - name: {{ primary_entity.name }}
+        type: primary
+        expr: {{ primary_entity.expr }}
+      {%- for entity in entities %}
+      - name: {{ entity.name }}
+        type: {{ entity.type | default('foreign') }}
+        expr: {{ entity.expr }}
+      {%- endfor %}
+
+    dimensions:
+      {%- for dim in dimensions %}
+      - name: {{ dim.name }}
+        type: {{ dim.type | default('categorical') }}
+        {%- if dim.type_params is defined %}
+        type_params:
+          time_granularity: {{ dim.type_params.time_granularity | default('day') }}
+        {%- endif %}
+        expr: {{ dim.expr | default(dim.name) }}
+        {%- if dim.description is defined %}
+        description: "{{ dim.description }}"
+        {%- endif %}
+      {%- endfor %}
+
+    measures:
+      {%- for measure in measures %}
+      - name: {{ measure.name }}
+        agg: {{ measure.agg }}
+        expr: {{ measure.expr | default(measure.name) }}
+        {%- if measure.description is defined %}
+        description: "{{ measure.description }}"
+        {%- endif %}
+        {%- if measure.create_metric is defined %}
+        create_metric: {{ measure.create_metric | lower }}
+        {%- endif %}
+      {%- endfor %}

@@ -1,5 +1,9 @@
-{#- Basic Airflow DAG template -#}
-{#- Variables: dag_id, description, schedule, owner, start_date, tasks (list of dicts: id, operator, params) -#}
+{#---
+name: Basic DAG
+description: Generate a standard Airflow DAG with configurable tasks, operators, and linear dependencies.
+category: airflow
+variables: dag_id, description, schedule, owner, start_date, tasks
+---#}
 
 from datetime import datetime
 

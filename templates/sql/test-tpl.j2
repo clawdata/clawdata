@@ -1,1 +1,7 @@
+{#---
+name: Select All
+description: Simple SELECT * query from a schema-qualified table.
+category: sql
+variables: schema, table
+---#}
 SELECT * FROM {{ schema }}.{{ table }};

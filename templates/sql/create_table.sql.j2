@@ -1,5 +1,9 @@
-{#- CREATE TABLE template -#}
-{#- Variables: schema, table_name, columns (list of dicts: name, type, nullable, default), primary_key -#}
+{#---
+name: Create Table
+description: Generate a CREATE TABLE statement with typed columns, nullability, defaults, and primary key.
+category: sql
+variables: schema, table_name, columns, primary_key
+---#}
 
 CREATE TABLE IF NOT EXISTS {{ schema }}.{{ table_name }} (
     {%- for col in columns %}

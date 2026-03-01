@@ -1,5 +1,9 @@
-{#- dbt source YAML template -#}
-{#- Variables: source_name, database, schema, tables (list of dicts: name, description, columns) -#}
+{#---
+name: Source YAML
+description: Generate a dbt source.yml defining external database tables with column-level documentation.
+category: dbt
+variables: source_name, database, schema, tables
+---#}
 
 version: 2
 

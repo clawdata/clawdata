@@ -1,0 +1,44 @@
+{#---
+name: Semantic Metric YAML
+description: Generate dbt metric definitions for the semantic layer. Supports derived and ratio metrics built on top of semantic model measures.
+category: dbt
+variables: metrics
+---#}
+
+metrics:
+  {%- for metric in metrics %}
+  - name: {{ metric.name }}
+    description: "{{ metric.description | default('') }}"
+    type: {{ metric.type | default('simple') }}
+    label: "{{ metric.label | default(metric.name | replace('_', ' ') | title) }}"
+    type_params:
+      {%- if metric.type == 'derived' %}
+      expr: "{{ metric.expr }}"
+      metrics:
+        {%- for m in metric.metrics %}
+        - name: {{ m.name }}
+          {%- if m.offset_window is defined %}
+          offset_window: {{ m.offset_window }}
+          {%- endif %}
+          {%- if m.filter is defined %}
+          filter: "{{ m.filter }}"
+          {%- endif %}
+        {%- endfor %}
+      {%- elif metric.type == 'ratio' %}
+      numerator:
+        name: {{ metric.numerator }}
+        {%- if metric.numerator_filter is defined %}
+        filter: "{{ metric.numerator_filter }}"
+        {%- endif %}
+      denominator:
+        name: {{ metric.denominator }}
+        {%- if metric.denominator_filter is defined %}
+        filter: "{{ metric.denominator_filter }}"
+        {%- endif %}
+      {%- else %}
+      measure: {{ metric.measure }}
+      {%- endif %}
+    {%- if metric.filter is defined %}
+    filter: "{{ metric.filter }}"
+    {%- endif %}
+  {%- endfor %}

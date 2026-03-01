@@ -1,0 +1,31 @@
+{
+    "duckdb.databases": [
+        {
+            "alias": "sample",
+            "type": "file",
+            "path": "/Users/seanpreusse/Documents/Dev/clawdata/userdata/agents/main/sample_data/sample.duckdb",
+            "attached": false
+        },
+        {
+            "alias": "mydb",
+            "type": "file",
+            "path": "/Users/seanpreusse/Documents/Dev/clawdata/userdata/agents/main/mydb.duckdb",
+            "attached": false,
+            "readOnly": false
+        },
+        {
+            "alias": "clawdata",
+            "type": "file",
+            "path": "/Users/seanpreusse/Documents/Dev/clawdata/clawdata.db",
+            "attached": false
+        },
+        {
+            "alias": "sample_data",
+            "type": "file",
+            "path": "/Users/seanpreusse/Documents/Dev/clawdata/userdata/agents/main/sample_data.duckdb",
+            "attached": true,
+            "readOnly": false
+        }
+    ],
+    "duckdb.defaultDatabase": "sample_data"
+}

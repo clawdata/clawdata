@@ -1,0 +1,27 @@
+{#---
+name: Gold Dimension Model
+description: Generate a dbt gold-layer dimension model. Selects descriptive attributes from a silver model with a surrogate key, creating a conformed dimension for star-schema joins.
+category: dbt
+variables: model_name, source_model, primary_key, attributes, description
+---#}
+
+with source as (
+
+    select * from {{ '{{' }} ref('{{ source_model }}') {{ '}}' }}
+
+),
+
+final as (
+
+    select
+        {{ '{{' }} dbt_utils.generate_surrogate_key(['{{ primary_key }}']) {{ '}}' }} as {{ model_name }}_key,
+        {{ primary_key }},
+        {%- for attr in attributes %}
+        {{ attr.name }}{% if not loop.last %},{% endif %}
+        {%- endfor %}
+
+    from source
+
+)
+
+select * from final

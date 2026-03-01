@@ -1,0 +1,54 @@
+{#---
+name: Silver Model - Type 3 SCD
+description: Generate a dbt silver model implementing Type 3 Slowly Changing Dimension (previous value columns). Keeps the current and previous values side-by-side for tracked columns.
+category: dbt
+variables: model_name, source_model, primary_key, columns, updated_at_column, tracked_columns
+---#}
+
+with source as (
+
+    select * from {{ '{{' }} ref('{{ source_model }}') {{ '}}' }}
+
+),
+
+with_previous as (
+
+    select
+        {%- for col in columns %}
+        {{ col.name }},
+        {%- endfor %}
+        {%- for col in tracked_columns %}
+        lag({{ col }}) over (
+            partition by {{ primary_key }}
+            order by {{ updated_at_column }}
+        ) as previous_{{ col }},
+        {%- endfor %}
+        row_number() over (
+            partition by {{ primary_key }}
+            order by {{ updated_at_column }} desc
+        ) as _row_num
+
+    from source
+
+),
+
+final as (
+
+    select
+        {%- for col in columns %}
+        {%- if col.transform is defined %}
+        {{ col.transform }} as {{ col.name }},
+        {%- else %}
+        {{ col.name }},
+        {%- endif %}
+        {%- endfor %}
+        {%- for col in tracked_columns %}
+        previous_{{ col }}{% if not loop.last %},{% endif %}
+        {%- endfor %}
+
+    from with_previous
+    where _row_num = 1
+
+)
+
+select * from final

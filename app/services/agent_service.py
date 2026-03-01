@@ -94,6 +94,16 @@ _(Update this as you learn about the person you're helping.)_
 
 - Use `read` to inspect existing project files before making changes.
 - Use templates from the `templates/` directory for scaffolding.
+- The `templates/` directory contains Jinja2 reference templates organised by category:
+  - `templates/dbt/` — dbt model templates (staging, intermediate, mart, source/schema YAML)
+  - `templates/airflow/` — Airflow DAG templates (basic, dbt-run, ELT)
+  - `templates/sql/` — Raw SQL patterns
+  - `templates/sampledata/` — CSV sample data files
+- Sample data files (exact paths):
+  - `templates/sampledata/sample_customers.csv`
+  - `templates/sampledata/sample_orders.csv`
+  - `templates/sampledata/sample_payments.csv`
+  - `templates/sampledata/sample_products.csv`
 - Store durable decisions in `memory/YYYY-MM-DD.md`.
 - Update `USER.md` when you learn something about the user.
 """,
@@ -336,6 +346,62 @@ def _seed_workspace(workspace: Path) -> None:
     # Ensure the skills directory exists (users add skills manually)
     (workspace / "skills").mkdir(parents=True, exist_ok=True)
 
+    # Symlink project-level templates into the workspace
+    _sync_project_templates_to_workspace(workspace)
+
+
+def _sync_project_templates_to_workspace(workspace: Path) -> None:
+    """Copy project-level templates into an agent's workspace.
+
+    Copies the contents of ``settings.templates_dir`` into the workspace's
+    ``templates/`` directory.  Files are only overwritten when the source is
+    newer, and stale files that no longer exist in the project are removed.
+
+    Note: symlinks are **not** used because the OpenClaw gateway's boundary
+    security rejects symlink targets that resolve outside the workspace root.
+    """
+    project_templates = settings.templates_dir.resolve()
+    if not project_templates.is_dir():
+        return
+
+    ws_templates = workspace / "templates"
+
+    # If there's a stale symlink from a previous version, replace it
+    if ws_templates.is_symlink():
+        ws_templates.unlink()
+
+    ws_templates.mkdir(parents=True, exist_ok=True)
+
+    # Walk the project templates tree and copy/update files
+    project_files: set[Path] = set()
+    for src in project_templates.rglob("*"):
+        if src.name.startswith("."):
+            continue
+        rel = src.relative_to(project_templates)
+        dest = ws_templates / rel
+        project_files.add(rel)
+
+        if src.is_dir():
+            dest.mkdir(parents=True, exist_ok=True)
+        elif src.is_file():
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            # Only copy if source is newer or dest doesn't exist
+            if not dest.exists() or src.stat().st_mtime > dest.stat().st_mtime:
+                shutil.copy2(src, dest)
+
+    # Remove stale files in workspace templates that no longer exist in project
+    if ws_templates.exists():
+        for dest in sorted(ws_templates.rglob("*"), reverse=True):
+            rel = dest.relative_to(ws_templates)
+            if rel not in project_files:
+                if dest.is_file():
+                    dest.unlink()
+                    logger.debug("Removed stale template: %s", rel)
+                elif dest.is_dir() and not any(dest.iterdir()):
+                    dest.rmdir()
+
+    logger.debug("Synced project templates → %s", ws_templates)
+
 
 def _sync_project_skills_to_workspace(workspace: Path) -> None:
     """Symlink project-level skills into an agent's workspace/skills/ directory.
@@ -383,7 +449,7 @@ def _sync_project_skills_to_workspace(workspace: Path) -> None:
 
 
 def sync_all_project_skills() -> dict[str, list[str]]:
-    """Sync project-level skills into every agent workspace on disk.
+    """Sync project-level skills and templates into every agent workspace on disk.
 
     Returns a dict mapping agent_id → list of synced skill slugs.
     """
@@ -396,6 +462,7 @@ def sync_all_project_skills() -> dict[str, list[str]]:
         if not agent_dir.is_dir() or agent_dir.name.startswith("."):
             continue
         _sync_project_skills_to_workspace(agent_dir)
+        _sync_project_templates_to_workspace(agent_dir)
         # Report what's now linked
         ws_skills = agent_dir / "skills"
         linked = [

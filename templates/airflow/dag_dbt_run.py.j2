@@ -1,5 +1,9 @@
-{#- Airflow DAG for running dbt -#}
-{#- Variables: dag_id, project_dir, profiles_dir, schedule, target, models (optional) -#}
+{#---
+name: dbt Run DAG
+description: Generate an Airflow DAG that runs dbt deps, run, and test in sequence.
+category: airflow
+variables: dag_id, project_dir, profiles_dir, schedule, target, models
+---#}
 
 from datetime import datetime
 

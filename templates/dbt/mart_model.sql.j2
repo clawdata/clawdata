@@ -1,5 +1,9 @@
-{#- dbt mart model template -#}
-{#- Variables: model_name, description, metrics (list of dicts: name, expression), dimensions (list), grain -#}
+{#---
+name: Mart Model
+description: Generate a dbt mart model with aggregated metrics grouped by dimension columns.
+category: dbt
+variables: model_name, description, metrics, dimensions, grain
+---#}
 
 with base as (
 

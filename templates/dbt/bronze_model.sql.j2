@@ -1,0 +1,39 @@
+{#---
+name: Bronze Model
+description: Generate a dbt bronze model that flattens raw JSON data from a source table into typed columns. Designed as the first layer of the medallion architecture.
+category: dbt
+variables: source_name, table_name, json_column, fields
+---#}
+
+with raw as (
+
+    select * from {{ '{{' }} source('{{ source_name }}', '{{ table_name }}') {{ '}}' }}
+
+),
+
+flattened as (
+
+    select
+        {%- for field in fields %}
+        {%- if field.path is defined %}
+        {{ '{{' }} {{ json_column }}{{ field.path }} {{ '}}' }}{% if field.cast is defined %}::{{ field.cast }}{% endif %} as {{ field.name }}{% if not loop.last %},{% endif %}
+        {%- else %}
+        ({{ json_column }}->>'{{ field.key }}'){% if field.cast is defined %}::{{ field.cast }}{% endif %} as {{ field.name }}{% if not loop.last %},{% endif %}
+        {%- endif %}
+        {%- endfor %}
+
+    from raw
+
+),
+
+final as (
+
+    select
+        *,
+        {{ '{{' }} run_started_at {{ '}}' }} as _dbt_loaded_at,
+        {{ '{{' }} invocation_id {{ '}}' }} as _dbt_invocation_id
+    from flattened
+
+)
+
+select * from final

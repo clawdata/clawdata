@@ -106,4 +106,4 @@ See [PLAN.md](PLAN.md) for the full implementation plan.
 | `userdata/` | Agent workspaces (head agent + sub-agents) |
 | `migrations/` | Alembic database migrations |
 | `tests/` | Test suite |
-| `web/` | Next.js 15 frontend (App Router, shadcn/ui) |
+| `web/` | Next.js 16 frontend (App Router, shadcn/ui) |

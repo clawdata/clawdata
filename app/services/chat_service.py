@@ -92,7 +92,14 @@ def _load_memory_context(agent_id: str) -> str:
         if content and content != "# Memory\n\n_Long-term curated memory. Update this with important facts, decisions, and context._":
             parts.append(f"[MEMORY.md]\n{content}")
 
-    # 4. Recent daily memory files (today + 2 days back)
+    # 4. TOOLS.md — tool notes, available templates & sample data paths
+    tools_file = workspace / "TOOLS.md"
+    if tools_file.exists():
+        content = tools_file.read_text().strip()
+        if content and content != "# Tool Notes":
+            parts.append(f"[TOOLS.md]\n{content}")
+
+    # 5. Recent daily memory files (today + 2 days back)
     memory_dir = workspace / "memory"
     if memory_dir.exists():
         today = datetime.date.today()

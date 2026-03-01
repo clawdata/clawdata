@@ -105,6 +105,86 @@ duckdb userdata/warehouse.duckdb -c "COPY (SELECT * FROM <table>) TO '<output.cs
 - User asks a data question → write SQL and run it
 - User asks about row counts, aggregations, filters → write and run the appropriate SQL
 - User wants to explore a CSV/Parquet/JSON without loading → query the file directly with `read_csv_auto()` / `read_parquet()` / `read_json_auto()`
+- User asks for analysis → run queries, then present results using charts and tables (see Analysis Workflow below)
+
+## Analysis Workflow
+
+When the user asks for analysis, follow this pattern:
+
+1. **Query the data** using DuckDB with `-json` flag for structured output
+2. **Present key metrics** in a summary markdown table
+3. **Produce charts** using `chart` fenced code blocks with JSON specs (see SOUL.md for format)
+4. **Show detail tables** in markdown format
+5. **Provide insights** — bullet points explaining what the data tells us
+
+### Example: Producing a Chart from Query Results
+
+Run the query:
+```bash
+duckdb userdata/warehouse.duckdb -json -c "SELECT category, ROUND(SUM(unit_price * quantity), 2) AS revenue FROM orders JOIN products ON orders.product_sku = products.sku GROUP BY category ORDER BY revenue DESC LIMIT 10;"
+```
+
+Then format the results as a chart block in your response:
+````
+```chart
+{
+  "type": "bar",
+  "title": "Revenue by Category",
+  "data": [
+    {"name": "Electronics", "value": 4800},
+    {"name": "Furniture", "value": 3200}
+  ],
+  "xKey": "name",
+  "yKey": "value",
+  "color": "#6366f1"
+}
+```
+````
+
+### Common Analysis Queries
+
+**Customer Lifetime Value:**
+```sql
+SELECT c.first_name || ' ' || c.last_name AS customer,
+       COUNT(DISTINCT o.order_id) AS orders,
+       ROUND(SUM(o.quantity * p.unit_price), 2) AS total_revenue,
+       ROUND(AVG(o.quantity * p.unit_price), 2) AS avg_order_value,
+       MIN(o.order_date) AS first_order,
+       MAX(o.order_date) AS last_order
+FROM customers c
+JOIN orders o ON c.id = o.customer_id
+JOIN products p ON o.product_sku = p.sku
+GROUP BY 1 ORDER BY total_revenue DESC;
+```
+
+**Monthly Revenue Trend:**
+```sql
+SELECT STRFTIME(order_date, '%Y-%m') AS month,
+       COUNT(DISTINCT order_id) AS orders,
+       ROUND(SUM(quantity * unit_price), 2) AS revenue
+FROM orders o JOIN products p ON o.product_sku = p.sku
+GROUP BY 1 ORDER BY 1;
+```
+
+**Product Performance:**
+```sql
+SELECT p.product_name, p.category,
+       SUM(o.quantity) AS units_sold,
+       ROUND(SUM(o.quantity * p.unit_price), 2) AS revenue,
+       COUNT(DISTINCT o.customer_id) AS unique_buyers
+FROM products p JOIN orders o ON p.sku = o.product_sku
+GROUP BY 1, 2 ORDER BY revenue DESC;
+```
+
+**Payment Method Distribution:**
+```sql
+SELECT pay.payment_method,
+       COUNT(*) AS transactions,
+       ROUND(SUM(pay.amount), 2) AS total_amount,
+       ROUND(AVG(pay.amount), 2) AS avg_amount
+FROM payments pay
+GROUP BY 1 ORDER BY total_amount DESC;
+```
 
 ## Output Formatting
 
@@ -112,6 +192,7 @@ duckdb userdata/warehouse.duckdb -c "COPY (SELECT * FROM <table>) TO '<output.cs
 - Use `-json` flag for JSON output: `duckdb userdata/warehouse.duckdb -json -c "..."`
 - Use `-csv` flag for CSV output: `duckdb userdata/warehouse.duckdb -csv -c "..."`
 - Default output is column-aligned plain text
+- **Prefer `-json` for analysis** — it's easiest to transform into chart specs
 
 ## Tips
 
