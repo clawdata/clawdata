@@ -86,6 +86,22 @@ npm run dev
 # Open http://localhost:3000
 ```
 
+### TUI (Terminal UI)
+
+Connect directly to the OpenClaw gateway from your terminal:
+
+```bash
+./start-tui.sh
+```
+
+The script auto-detects the gateway token, starts the gateway if needed, handles device pairing, and opens a fresh chat session. Pass extra flags as needed:
+
+```bash
+./start-tui.sh --session main       # Rejoin the default session
+./start-tui.sh --deliver            # Deliver replies to linked channels
+./start-tui.sh --message "hello"    # Send an initial message on connect
+```
+
 ## API Docs
 
 Once running, visit:
