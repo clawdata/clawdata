@@ -9,6 +9,7 @@ artifacts. Organized by domain.
 |----------|----------|
 | `dbt/` | dbt model templates (staging, intermediate, mart), source/schema YAML |
 | `airflow/` | Airflow DAG templates (basic, dbt-run, ELT pattern) |
+| `azure/` | Azure Functions (HTTP & Event Hub triggers), Event Hub producer/consumer, streaming analytics pipeline |
 | `sql/` | Raw SQL patterns (CREATE TABLE, SCD2 merge) |
 
 ## Usage

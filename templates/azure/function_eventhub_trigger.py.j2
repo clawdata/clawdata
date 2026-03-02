@@ -1,0 +1,75 @@
+{#---
+name: Event Hub Triggered Function
+description: Generate an Azure Function triggered by Event Hub events for real-time stream processing.
+category: azure
+variables: function_name, eventhub_name, consumer_group, connection_setting, output_table, output_connection, processing_logic
+---#}
+
+import json
+import logging
+from datetime import datetime
+
+import azure.functions as func
+
+app = func.FunctionApp()
+
+
+@app.function_name(name="{{ function_name }}")
+@app.event_hub_message_trigger(
+    arg_name="events",
+    event_hub_name="{{ eventhub_name }}",
+    connection="{{ connection_setting | default('EventHubConnection') }}",
+    consumer_group="{{ consumer_group | default('$Default') }}",
+    cardinality="many",
+    data_type="string",
+)
+{%- if output_table %}
+@app.table_output(
+    arg_name="outputTable",
+    table_name="{{ output_table }}",
+    connection="{{ output_connection | default('AzureWebJobsStorage') }}",
+)
+{%- endif %}
+def {{ function_name }}(events: list[func.EventHubEvent]{{ ', outputTable: func.Out[str]' if output_table else '' }}):
+    """Process events from {{ eventhub_name }} Event Hub.
+
+    Receives batches of events and processes them for downstream analytics.
+    """
+    processed = []
+
+    for event in events:
+        try:
+            body = event.get_body().decode("utf-8")
+            payload = json.loads(body)
+
+            # Event metadata
+            metadata = {
+                "enqueued_time": str(event.enqueued_time),
+                "sequence_number": event.sequence_number,
+                "offset": event.offset,
+                "partition_key": event.partition_key,
+            }
+
+            {{ processing_logic | default('# TODO: Add your processing logic here
+            result = {
+                "data": payload,
+                "metadata": metadata,
+                "processed_at": datetime.utcnow().isoformat(),
+            }') | indent(12) }}
+
+            processed.append(result)
+            logging.info("Processed event seq=%s from partition=%s", event.sequence_number, event.partition_key)
+
+        except json.JSONDecodeError:
+            logging.error("Invalid JSON in event: %s", body[:200])
+        except Exception as e:
+            logging.error("Error processing event: %s", str(e))
+
+    {%- if output_table %}
+
+    if processed:
+        outputTable.set(json.dumps(processed))
+        logging.info("Wrote %d records to {{ output_table }}", len(processed))
+    {%- endif %}
+
+    logging.info("Batch complete — processed %d of %d events", len(processed), len(events))

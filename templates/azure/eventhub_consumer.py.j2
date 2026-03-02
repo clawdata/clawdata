@@ -1,0 +1,105 @@
+{#---
+name: Event Hub Consumer
+description: Generate a Python Event Hub consumer that reads and processes events from a streaming pipeline.
+category: azure
+variables: eventhub_name, consumer_group, connection_string_env, storage_connection_env, checkpoint_container, handler_logic
+---#}
+
+import asyncio
+import json
+import logging
+import os
+from datetime import datetime, timezone
+
+from azure.eventhub.aio import EventHubConsumerClient
+from azure.eventhub.extensions.checkpointstoreblobaio import BlobCheckpointStore
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+logger = logging.getLogger(__name__)
+
+CONNECTION_STR = os.environ["{{ connection_string_env | default('EVENTHUB_CONNECTION_STRING') }}"]
+EVENTHUB_NAME = "{{ eventhub_name }}"
+CONSUMER_GROUP = "{{ consumer_group | default('$Default') }}"
+STORAGE_CONNECTION_STR = os.environ["{{ storage_connection_env | default('CHECKPOINT_STORAGE_CONNECTION') }}"]
+CHECKPOINT_CONTAINER = "{{ checkpoint_container | default('eventhub-checkpoints') }}"
+
+
+async def on_event(partition_context, event):
+    """Process a single event from partition {{ '{{' }} partition_context.partition_id {{ '}}' }}."""
+    try:
+        body = event.body_as_str(encoding="utf-8")
+        payload = json.loads(body)
+
+        metadata = {
+            "partition_id": partition_context.partition_id,
+            "sequence_number": event.sequence_number,
+            "offset": event.offset,
+            "enqueued_time": str(event.enqueued_time),
+        }
+
+        {{ handler_logic | default('# TODO: Add your event handling logic here
+        logger.info(
+            "Received event: partition=%s, seq=%s, data=%s",
+            metadata["partition_id"],
+            metadata["sequence_number"],
+            json.dumps(payload)[:200],
+        )') | indent(8) }}
+
+    except json.JSONDecodeError:
+        logger.error("Invalid JSON event on partition %s", partition_context.partition_id)
+    except Exception as e:
+        logger.error("Error processing event: %s", str(e))
+
+    # Checkpoint after each event (tune for throughput vs. at-least-once guarantees)
+    await partition_context.update_checkpoint(event)
+
+
+async def on_partition_initialize(partition_context):
+    logger.info("Partition %s initialized", partition_context.partition_id)
+
+
+async def on_partition_close(partition_context, reason):
+    logger.info("Partition %s closed: %s", partition_context.partition_id, reason)
+
+
+async def on_error(partition_context, error):
+    if partition_context:
+        logger.error("Error on partition %s: %s", partition_context.partition_id, error)
+    else:
+        logger.error("Consumer error: %s", error)
+
+
+async def main():
+    """Start the Event Hub consumer with blob checkpoint store."""
+    checkpoint_store = BlobCheckpointStore.from_connection_string(
+        STORAGE_CONNECTION_STR,
+        CHECKPOINT_CONTAINER,
+    )
+
+    consumer = EventHubConsumerClient.from_connection_string(
+        conn_str=CONNECTION_STR,
+        consumer_group=CONSUMER_GROUP,
+        eventhub_name=EVENTHUB_NAME,
+        checkpoint_store=checkpoint_store,
+    )
+
+    async with consumer:
+        logger.info(
+            "Starting consumer on %s (group=%s) — press Ctrl+C to stop",
+            EVENTHUB_NAME,
+            CONSUMER_GROUP,
+        )
+        await consumer.receive(
+            on_event=on_event,
+            on_partition_initialize=on_partition_initialize,
+            on_partition_close=on_partition_close,
+            on_error=on_error,
+            starting_position="-1",  # Start from beginning of stream
+        )
+
+
+if __name__ == "__main__":
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        logger.info("Consumer stopped")

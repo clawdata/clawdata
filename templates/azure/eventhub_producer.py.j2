@@ -1,0 +1,91 @@
+{#---
+name: Event Hub Producer
+description: Generate a Python Event Hub producer that sends events for ingestion into a streaming pipeline.
+category: azure
+variables: eventhub_name, connection_string_env, batch_size, event_schema
+---#}
+
+import asyncio
+import json
+import logging
+import os
+from datetime import datetime, timezone
+
+from azure.eventhub import EventData
+from azure.eventhub.aio import EventHubProducerClient
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+logger = logging.getLogger(__name__)
+
+CONNECTION_STR = os.environ["{{ connection_string_env | default('EVENTHUB_CONNECTION_STRING') }}"]
+EVENTHUB_NAME = "{{ eventhub_name }}"
+BATCH_SIZE = {{ batch_size | default(100) }}
+
+
+def build_event(record: dict) -> EventData:
+    """Wrap a record as an EventData object with metadata."""
+    event = EventData(json.dumps(record))
+    event.properties = {
+        "source": "{{ eventhub_name }}-producer",
+        "produced_at": datetime.now(timezone.utc).isoformat(),
+    }
+    {%- if event_schema %}
+    event.content_type = "application/json"
+    {%- endif %}
+    return event
+
+
+async def send_batch(records: list[dict]) -> int:
+    """Send a batch of records to the {{ eventhub_name }} Event Hub.
+
+    Returns the number of events sent.
+    """
+    producer = EventHubProducerClient.from_connection_string(
+        conn_str=CONNECTION_STR,
+        eventhub_name=EVENTHUB_NAME,
+    )
+
+    sent = 0
+    async with producer:
+        batch = await producer.create_batch()
+
+        for record in records:
+            event = build_event(record)
+            try:
+                batch.add(event)
+            except ValueError:
+                # Batch is full — send it and start a new one
+                await producer.send_batch(batch)
+                sent += batch.size_in_bytes
+                logger.info("Sent batch (%d bytes)", batch.size_in_bytes)
+                batch = await producer.create_batch()
+                batch.add(event)
+
+        if batch:
+            await producer.send_batch(batch)
+            sent += batch.size_in_bytes
+            logger.info("Sent final batch (%d bytes)", batch.size_in_bytes)
+
+    logger.info("Published %d records to %s", len(records), EVENTHUB_NAME)
+    return len(records)
+
+
+{%- if event_schema %}
+
+
+# Expected event schema
+# {{ event_schema | tojson }}
+{%- endif %}
+
+
+if __name__ == "__main__":
+    # Example: send sample events
+    sample_records = [
+        {
+            "event_type": "sample",
+            "value": i,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+        for i in range(BATCH_SIZE)
+    ]
+    asyncio.run(send_batch(sample_records))

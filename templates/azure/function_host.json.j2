@@ -1,0 +1,43 @@
+{#---
+name: Function App host.json
+description: Generate a host.json configuration for an Azure Functions app with Event Hub and extension bundle settings.
+category: azure
+variables: max_batch_size, prefetch_count, initial_offset, batch_checkpoint_frequency
+---#}
+
+{
+  "version": "2.0",
+  "logging": {
+    "applicationInsights": {
+      "samplingSettings": {
+        "isEnabled": true,
+        "excludedTypes": "Request"
+      }
+    },
+    "logLevel": {
+      "default": "Information",
+      "Host.Results": "Error",
+      "Function": "Information",
+      "Host.Aggregator": "Trace"
+    }
+  },
+  "extensionBundle": {
+    "id": "Microsoft.Azure.Functions.ExtensionBundle",
+    "version": "[4.*, 5.0.0)"
+  },
+  "extensions": {
+    "eventHubs": {
+      "maxEventBatchSize": {{ max_batch_size | default(64) }},
+      "prefetchCount": {{ prefetch_count | default(256) }},
+      "initialOffsetFromEnd": {{ initial_offset | default('true') }},
+      "batchCheckpointFrequency": {{ batch_checkpoint_frequency | default(1) }},
+      "clientRetryOptions": {
+        "mode": "Exponential",
+        "tryTimeout": "00:01:00",
+        "delay": "00:00:00.80",
+        "maximumDelay": "00:01:00",
+        "maximumRetries": 3
+      }
+    }
+  }
+}

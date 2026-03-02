@@ -1,0 +1,161 @@
+{#---
+name: Streaming Analytics Pipeline
+description: Generate an end-to-end Azure streaming analytics pipeline with Event Hub ingestion, Azure Function processing, and output sinks.
+category: azure
+variables: pipeline_name, eventhub_name, consumer_group, connection_setting, window_seconds, aggregation_fields, output_eventhub, output_connection, cosmos_connection, cosmos_database, cosmos_container
+---#}
+
+import json
+import logging
+from collections import defaultdict
+from datetime import datetime, timezone
+
+import azure.functions as func
+
+app = func.FunctionApp()
+
+
+# ---------------------------------------------------------------------------
+# Streaming analytics: {{ pipeline_name }}
+#
+# Architecture:
+#   Event Hub ({{ eventhub_name }})
+#       → Azure Function (tumbling window aggregation)
+#           → Output Event Hub ({{ output_eventhub | default('analytics-output') }})
+#           → Cosmos DB   (materialised view)
+# ---------------------------------------------------------------------------
+
+
+def aggregate_window(events: list[dict], window_seconds: int = {{ window_seconds | default(60) }}) -> list[dict]:
+    """Aggregate events into tumbling windows of {{ window_seconds | default(60) }}s.
+
+    Groups by {{ aggregation_fields | default(['event_type']) | join(', ') }} and computes
+    count, sum, min, max, and average for any numeric values.
+    """
+    windows: dict[str, list[dict]] = defaultdict(list)
+
+    for event in events:
+        ts = event.get("timestamp") or event.get("enqueued_time") or datetime.now(timezone.utc).isoformat()
+        if isinstance(ts, str):
+            ts = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+        window_start = ts.replace(
+            second=(ts.second // window_seconds) * window_seconds,
+            microsecond=0,
+        )
+        group_fields = {{ aggregation_fields | default(['event_type']) | tojson }}
+        group_key = "|".join(str(event.get(f, "unknown")) for f in group_fields)
+        bucket_key = f"{window_start.isoformat()}|{group_key}"
+        windows[bucket_key].append(event)
+
+    results = []
+    for bucket_key, bucket_events in windows.items():
+        parts = bucket_key.split("|", 1)
+        window_start_str = parts[0]
+        group_key = parts[1] if len(parts) > 1 else "all"
+
+        # Collect numeric fields for aggregation
+        numeric_aggs: dict[str, list[float]] = defaultdict(list)
+        for evt in bucket_events:
+            for k, v in evt.items():
+                if isinstance(v, (int, float)) and k not in ("sequence_number", "offset"):
+                    numeric_aggs[k].append(float(v))
+
+        agg = {
+            "window_start": window_start_str,
+            "group_key": group_key,
+            "event_count": len(bucket_events),
+        }
+        for field, values in numeric_aggs.items():
+            agg[f"{field}_sum"] = sum(values)
+            agg[f"{field}_min"] = min(values)
+            agg[f"{field}_max"] = max(values)
+            agg[f"{field}_avg"] = round(sum(values) / len(values), 4)
+
+        results.append(agg)
+
+    return results
+
+
+@app.function_name(name="{{ pipeline_name }}")
+@app.event_hub_message_trigger(
+    arg_name="events",
+    event_hub_name="{{ eventhub_name }}",
+    connection="{{ connection_setting | default('EventHubConnection') }}",
+    consumer_group="{{ consumer_group | default('$Default') }}",
+    cardinality="many",
+    data_type="string",
+)
+{%- if output_eventhub %}
+@app.event_hub_output(
+    arg_name="outputHub",
+    event_hub_name="{{ output_eventhub }}",
+    connection="{{ output_connection | default('OutputEventHubConnection') }}",
+)
+{%- endif %}
+{%- if cosmos_database %}
+@app.cosmos_db_output(
+    arg_name="outputCosmos",
+    database_name="{{ cosmos_database }}",
+    container_name="{{ cosmos_container | default('analytics') }}",
+    connection="{{ cosmos_connection | default('CosmosDBConnection') }}",
+    create_if_not_exists=True,
+)
+{%- endif %}
+def {{ pipeline_name }}(
+    events: list[func.EventHubEvent],
+    {%- if output_eventhub %}
+    outputHub: func.Out[str],
+    {%- endif %}
+    {%- if cosmos_database %}
+    outputCosmos: func.Out[str],
+    {%- endif %}
+):
+    """Streaming analytics pipeline: {{ pipeline_name }}.
+
+    Ingests events from {{ eventhub_name }}, applies tumbling-window aggregation,
+    and writes results to downstream sinks.
+    """
+    logging.info("Received batch of %d events", len(events))
+
+    # --- Parse incoming events ---
+    parsed = []
+    for event in events:
+        try:
+            body = event.get_body().decode("utf-8")
+            payload = json.loads(body)
+            payload["enqueued_time"] = str(event.enqueued_time)
+            payload["partition_key"] = event.partition_key
+            parsed.append(payload)
+        except (json.JSONDecodeError, UnicodeDecodeError) as e:
+            logging.warning("Skipping malformed event: %s", str(e))
+
+    if not parsed:
+        logging.info("No valid events in batch — skipping")
+        return
+
+    # --- Aggregate ---
+    aggregated = aggregate_window(parsed)
+    logging.info("Produced %d aggregate windows from %d events", len(aggregated), len(parsed))
+
+    # --- Enrich with pipeline metadata ---
+    for record in aggregated:
+        record["pipeline"] = "{{ pipeline_name }}"
+        record["processed_at"] = datetime.now(timezone.utc).isoformat()
+
+    output_json = json.dumps(aggregated)
+
+    {%- if output_eventhub %}
+
+    # Write to downstream Event Hub
+    outputHub.set(output_json)
+    logging.info("Forwarded %d aggregates to {{ output_eventhub }}", len(aggregated))
+    {%- endif %}
+
+    {%- if cosmos_database %}
+
+    # Write to Cosmos DB
+    outputCosmos.set(output_json)
+    logging.info("Wrote %d aggregates to Cosmos DB ({{ cosmos_database }}/{{ cosmos_container | default('analytics') }})", len(aggregated))
+    {%- endif %}
+
+    logging.info("Pipeline {{ pipeline_name }} complete — %d events → %d aggregates", len(parsed), len(aggregated))

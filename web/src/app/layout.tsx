@@ -20,7 +20,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "ClawData — Data Engineering Assistant",
+  title: "ClawData Data Engineering Assistant",
   description: "Manage your OpenClaw-powered data engineering assistant",
   icons: {
     icon: "/favicon.svg",

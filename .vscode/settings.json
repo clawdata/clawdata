@@ -23,7 +23,7 @@
             "alias": "sample_data",
             "type": "file",
             "path": "/Users/seanpreusse/Documents/Dev/clawdata/userdata/agents/main/sample_data.duckdb",
-            "attached": true,
+            "attached": false,
             "readOnly": false
         }
     ],

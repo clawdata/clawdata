@@ -1,0 +1,70 @@
+{#---
+name: HTTP Triggered Function
+description: Generate an Azure Function with an HTTP trigger, suitable for REST API endpoints or webhook receivers.
+category: azure
+variables: function_name, route, methods, auth_level, response_model
+---#}
+
+import json
+import logging
+from datetime import datetime
+
+import azure.functions as func
+
+app = func.FunctionApp()
+
+
+@app.function_name(name="{{ function_name }}")
+@app.route(
+    route="{{ route | default(function_name) }}",
+    methods=[{{ methods | default('"GET", "POST"') }}],
+    auth_level=func.AuthLevel.{{ auth_level | default('FUNCTION') }},
+)
+def {{ function_name }}(req: func.HttpRequest) -> func.HttpResponse:
+    """HTTP trigger for {{ function_name }}.
+
+    {{ 'Accepts ' + (methods | default('GET, POST')) + ' requests.' }}
+    """
+    logging.info("{{ function_name }} processed a %s request", req.method)
+
+    try:
+        if req.method == "GET":
+            name = req.params.get("name")
+            return func.HttpResponse(
+                json.dumps({
+                    "message": f"Hello, {name or 'world'}",
+                    "timestamp": datetime.utcnow().isoformat(),
+                }),
+                mimetype="application/json",
+                status_code=200,
+            )
+
+        elif req.method == "POST":
+            body = req.get_json()
+
+            # TODO: Add your processing logic here
+            result = {
+                "received": body,
+                "processed_at": datetime.utcnow().isoformat(),
+                "status": "accepted",
+            }
+
+            return func.HttpResponse(
+                json.dumps(result),
+                mimetype="application/json",
+                status_code=202,
+            )
+
+    except ValueError:
+        return func.HttpResponse(
+            json.dumps({"error": "Invalid JSON payload"}),
+            mimetype="application/json",
+            status_code=400,
+        )
+    except Exception as e:
+        logging.error("Error in {{ function_name }}: %s", str(e))
+        return func.HttpResponse(
+            json.dumps({"error": "Internal server error"}),
+            mimetype="application/json",
+            status_code=500,
+        )
