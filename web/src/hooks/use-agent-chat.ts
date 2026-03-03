@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { chatWsUrl, lifecycleApi, type SessionEntry } from "@/lib/api";
-import type { ChatMessage, TraceEvent, AgentInfo } from "@/components/chat/types";
+import type { ChatMessage, TraceEvent, AgentInfo, ToolActivity } from "@/components/chat/types";
 
 export interface UseAgentChatOptions {
   /** Auto-connect when agentId changes (default: true) */
@@ -68,6 +68,132 @@ export function useAgentChat(
   // Agents ref for delegation label lookups inside WS callbacks
   const agentsRef = useRef(agents);
   agentsRef.current = agents;
+
+  // Track active tool calls for building tool_activity messages
+  const activeToolsRef = useRef<Map<string, { startTime: number; args: Record<string, unknown> }>>(new Map());
+
+  /* ── Tool activity helpers ─────────────────────────────────────── */
+
+  function extractSql(args: Record<string, unknown>): string | undefined {
+    const candidates = ["query", "sql", "statement", "code", "script"];
+    for (const key of candidates) {
+      if (typeof args[key] === "string" && args[key]) return args[key] as string;
+    }
+    // Check nested
+    for (const val of Object.values(args)) {
+      if (typeof val === "string" && val.length > 20 && /\b(SELECT|INSERT|UPDATE|DELETE|CREATE|WITH|DROP|ALTER)\b/i.test(val)) {
+        return val;
+      }
+    }
+    return undefined;
+  }
+
+  function buildToolLabel(name: string): string {
+    const lower = name.toLowerCase();
+    if (lower.includes("sql") || lower.includes("query") || lower.includes("execute")) return "SQL Query";
+    if (lower.includes("read")) return "Read File";
+    if (lower.includes("write")) return "Write File";
+    if (lower.includes("list")) return "List Resources";
+    if (lower.includes("search")) return "Search";
+    return name.split(/[_.]/).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+  }
+
+  function handleToolStart(toolName: string, metadata: Record<string, unknown>) {
+    const args = (metadata.args || metadata.input || {}) as Record<string, unknown>;
+    const sql = extractSql(args);
+
+    activeToolsRef.current.set(toolName, {
+      startTime: Date.now(),
+      args,
+    });
+
+    const activity: ToolActivity = {
+      name: toolName,
+      phase: "running",
+      args,
+      sql,
+      label: buildToolLabel(toolName),
+    };
+
+    setMessages((prev) => [
+      ...prev,
+      {
+        role: "tool_activity",
+        content: toolName,
+        timestamp: new Date(),
+        toolName,
+        toolPhase: "start",
+        toolActivity: activity,
+      },
+    ]);
+  }
+
+  function handleToolEnd(toolName: string, metadata: Record<string, unknown>) {
+    const tracked = activeToolsRef.current.get(toolName);
+    const durationMs = tracked ? Date.now() - tracked.startTime : undefined;
+    const args = tracked?.args || {};
+    const sql = extractSql(args);
+    const error = metadata.error as string | undefined;
+    const result = metadata.result || metadata.output || metadata.partialResult;
+    const resultStr = result ? String(result) : undefined;
+
+    // Try to parse result as structured data
+    let resultData: Record<string, unknown>[] | undefined;
+    if (resultStr) {
+      try {
+        const parsed = JSON.parse(resultStr);
+        if (Array.isArray(parsed) && parsed.length > 0 && typeof parsed[0] === "object") {
+          resultData = parsed;
+        }
+      } catch {
+        // Not JSON, that's fine
+      }
+    }
+
+    activeToolsRef.current.delete(toolName);
+
+    const activity: ToolActivity = {
+      name: toolName,
+      phase: error ? "error" : "completed",
+      args,
+      sql,
+      result: resultStr?.slice(0, 5000),
+      resultData,
+      durationMs,
+      error: error ? String(error) : undefined,
+      label: buildToolLabel(toolName),
+    };
+
+    // Update the existing tool_activity message for this tool
+    setMessages((prev) => {
+      // Find the last running tool_activity for this tool name
+      const idx = [...prev].reverse().findIndex(
+        (m) => m.role === "tool_activity" && m.toolName === toolName && m.toolActivity?.phase === "running",
+      );
+      if (idx >= 0) {
+        const realIdx = prev.length - 1 - idx;
+        const updated = [...prev];
+        updated[realIdx] = {
+          ...updated[realIdx],
+          toolPhase: "end",
+          toolActivity: activity,
+        };
+        return updated;
+      }
+      // No matching start — insert standalone
+      return [
+        ...prev,
+        {
+          role: "tool_activity",
+          content: toolName,
+          timestamp: new Date(),
+          toolName,
+          toolPhase: "end",
+          toolActivity: activity,
+        },
+      ];
+    });
+  }
 
   /* ── Streaming helpers ─────────────────────────────────────────── */
 
@@ -250,10 +376,13 @@ export function useAgentChat(
                 toolPhase: "start",
               },
             ]);
+          } else {
+            // Show tool activity inline in chat for non-delegation tools
+            const toolName = data.metadata?.name || data.metadata?.tool || content.split(":")[0].trim();
+            handleToolStart(toolName, data.metadata || {});
           }
-          // Non-delegation tools: no chat bubble — visible in trace panel
         } else if (type === "tool_end") {
-          // Update delegation bubbles only
+          // Update delegation bubbles
           setMessages((prev) => {
             const idx = [...prev]
               .reverse()
@@ -274,6 +403,12 @@ export function useAgentChat(
             }
             return prev;
           });
+          // Update tool activity card
+          const toolName = data.metadata?.name || data.metadata?.tool || content.split(":")[0].trim();
+          handleToolEnd(toolName, data.metadata || {});
+        } else if (type === "tool_update") {
+          // Intermediate update — could carry partial result data
+          // No-op for now; the card stays in "running" state
         } else if (type === "status") {
           const isTerminal =
             content === "completed" || content.startsWith("failed");
@@ -392,6 +527,7 @@ export function useAgentChat(
     setDelegating(false);
     setTraceEvents([]);
     traceSeqRef.current = 0;
+    activeToolsRef.current.clear();
     setSessionKey(null);
     setTimeout(() => connect(), 100);
   }, [connect]);
@@ -444,9 +580,10 @@ export function useAgentChat(
       setSessionKey(session.key);
 
       // Load session history before reconnecting
-      if (session.session_id && agentId) {
+      const historyId = session.session_id || session.key;
+      if (historyId && agentId) {
         lifecycleApi
-          .sessionHistory(agentId, session.session_id)
+          .sessionHistory(agentId, historyId)
           .then((resp) => {
             if (resp.messages && resp.messages.length > 0) {
               const historyMsgs: ChatMessage[] = resp.messages.map((m) => ({
@@ -457,10 +594,28 @@ export function useAgentChat(
                 timestamp: m.timestamp ? new Date(m.timestamp) : new Date(),
               }));
               setMessages((prev) => {
-                // Keep the "Resuming session" message, then add history
                 const systemMsgs = prev.filter((m) => m.role === "system");
                 return [...systemMsgs, ...historyMsgs];
               });
+            } else if (session.session_id && session.session_id !== session.key) {
+              // Retry with key if session_id returned no results
+              return lifecycleApi
+                .sessionHistory(agentId, session.key)
+                .then((resp2) => {
+                  if (resp2.messages && resp2.messages.length > 0) {
+                    const historyMsgs: ChatMessage[] = resp2.messages.map((m) => ({
+                      role: (m.role === "user" || m.role === "assistant"
+                        ? m.role
+                        : "system") as ChatMessage["role"],
+                      content: m.content,
+                      timestamp: m.timestamp ? new Date(m.timestamp) : new Date(),
+                    }));
+                    setMessages((prev) => {
+                      const systemMsgs = prev.filter((m) => m.role === "system");
+                      return [...systemMsgs, ...historyMsgs];
+                    });
+                  }
+                });
             }
           })
           .catch((err) => {

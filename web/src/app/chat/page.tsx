@@ -29,7 +29,7 @@ import {
 import { cn } from "@/lib/utils";
 import { AgentEmoji } from "@/components/agent-emoji";
 
-import type { AgentInfo } from "@/components/chat/types";
+import type { AgentInfo, ToolActivity } from "@/components/chat/types";
 import { ChatMessageBubble } from "@/components/chat/chat-message";
 import {
   ThinkingIndicator,
@@ -37,6 +37,7 @@ import {
 } from "@/components/chat/indicators";
 import { TracePanel } from "@/components/chat/trace-panel";
 import { ChatHistory } from "@/components/chat/chat-history";
+import { ThinkingProcess } from "@/components/chat/thinking-process";
 import { useAgentChat } from "@/hooks/use-agent-chat";
 import { SetupWizardDialog } from "@/components/openclaw/setup-wizard-dialog";
 
@@ -263,14 +264,47 @@ export default function ChatPage() {
               </div>
             ) : (
               <div className="space-y-3">
-                {chat.messages.map((msg, i) => (
-                  <ChatMessageBubble
-                    key={i}
-                    message={msg}
-                    agent={currentAgent}
-                    agents={agents}
-                  />
-                ))}
+                {(() => {
+                  const elements: React.ReactNode[] = [];
+                  let pendingActivities: ToolActivity[] = [];
+
+                  chat.messages.forEach((msg, i) => {
+                    if (msg.role === "tool_activity" && msg.toolActivity) {
+                      pendingActivities.push(msg.toolActivity);
+                      return;
+                    }
+                    // Flush any accumulated tool activities as a ThinkingProcess
+                    if (pendingActivities.length > 0) {
+                      elements.push(
+                        <ThinkingProcess
+                          key={`thinking-${i}`}
+                          activities={[...pendingActivities]}
+                        />,
+                      );
+                      pendingActivities = [];
+                    }
+                    elements.push(
+                      <ChatMessageBubble
+                        key={i}
+                        message={msg}
+                        agent={currentAgent}
+                        agents={agents}
+                      />,
+                    );
+                  });
+
+                  // Flush trailing tool activities (still running)
+                  if (pendingActivities.length > 0) {
+                    elements.push(
+                      <ThinkingProcess
+                        key="thinking-tail"
+                        activities={[...pendingActivities]}
+                      />,
+                    );
+                  }
+
+                  return elements;
+                })()}
 
                 {/* Thinking indicator */}
                 {chat.thinking && !chat.streaming && !chat.delegating && (

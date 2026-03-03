@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
 import {
   BarChart,
   Bar,
@@ -19,6 +19,7 @@ import {
   Legend,
   ResponsiveContainer,
 } from "recharts";
+import { Check, Download, Table2 } from "lucide-react";
 
 /* ── Default colour palette ─────────────────────────────────────── */
 
@@ -69,7 +70,10 @@ function formatValue(val: unknown): string {
 
 /* ── Custom tooltip ─────────────────────────────────────────────── */
 
-function ChartTooltip({
+// Stable singleton — avoids creating new JSX on every render.
+const TOOLTIP_CONTENT = <ChartTooltipInner />;
+
+function ChartTooltipInner({
   active,
   payload,
   label,
@@ -97,7 +101,17 @@ function ChartTooltip({
   );
 }
 
-/* ── Main component ─────────────────────────────────────────────── */
+/* ── Main component ─────────────────────────────────────────────── *
+ *
+ * IMPORTANT: This component is rendered INSIDE ReactMarkdown's
+ * component tree via the `code` override.  It must NOT use useState
+ * or useEffect — Recharts' ResponsiveContainer + animations can
+ * cause infinite re‑render loops when combined with React state
+ * inside ReactMarkdown.
+ *
+ * Interactive features (CSV download, table toggle) use refs and
+ * direct DOM manipulation instead.
+ * ─────────────────────────────────────────────────────────────────── */
 
 interface ChartRendererProps {
   spec: string;
@@ -114,6 +128,8 @@ export function ChartRenderer({ spec }: ChartRendererProps) {
     }
   }, [spec]);
 
+  const containerRef = useRef<HTMLDivElement>(null);
+
   if (!chart) {
     return (
       <div className="my-2 rounded-lg border border-destructive/50 bg-destructive/10 px-3 py-2 text-xs text-destructive">
@@ -124,16 +140,107 @@ export function ChartRenderer({ spec }: ChartRendererProps) {
 
   const height = chart.height || 300;
 
+  function handleDownload() {
+    if (!chart) return;
+    const headers = Object.keys(chart.data[0] || {});
+    const csv = [
+      headers.join(","),
+      ...chart.data.map((row) =>
+        headers
+          .map((h) => {
+            const v = row[h];
+            const s = String(v ?? "");
+            return s.includes(",") ? `"${s}"` : s;
+          })
+          .join(","),
+      ),
+    ].join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${(chart.title || "chart-data").replace(/\s+/g, "-").toLowerCase()}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   return (
-    <div className="my-3 rounded-lg border bg-card p-4">
-      {chart.title && (
-        <h4 className="mb-3 text-sm font-semibold">{chart.title}</h4>
-      )}
-      <div style={{ width: "100%", height }}>
+    <div ref={containerRef} className="my-3 overflow-hidden rounded-xl border bg-card shadow-sm">
+      {/* ── Header bar ───────────────────────────────────────────── */}
+      <div className="flex items-center justify-between border-b bg-muted/30 px-4 py-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <h4 className="truncate text-sm font-semibold">
+            {chart.title || "Data Visualization"}
+          </h4>
+          <span className="inline-flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900/30">
+            <Check className="h-2.5 w-2.5 text-emerald-600 dark:text-emerald-400" />
+          </span>
+        </div>
+        <button
+          onClick={handleDownload}
+          className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          title="Download CSV"
+        >
+          <Download className="h-3.5 w-3.5" />
+        </button>
+      </div>
+
+      {/* ── Chart ────────────────────────────────────────────────── */}
+      <div className="p-4" style={{ height }}>
         <ResponsiveContainer width="100%" height="100%">
           {renderChart(chart)}
         </ResponsiveContainer>
       </div>
+
+      {/* ── Collapsible data table (native <details>, no React state) */}
+      <details className="border-t">
+        <summary className="flex cursor-pointer items-center gap-1.5 px-4 py-2 text-xs font-medium text-muted-foreground select-none hover:bg-muted/30 transition-colors">
+          <Table2 className="h-3.5 w-3.5" />
+          View data table
+        </summary>
+        <ChartDataTable data={chart.data} />
+      </details>
+    </div>
+  );
+}
+
+/* ── Data table view ───────────────────────────────────────────── */
+
+function ChartDataTable({ data }: { data: Record<string, unknown>[] }) {
+  if (!data.length) {
+    return <p className="p-4 text-xs text-muted-foreground">No data</p>;
+  }
+  const headers = Object.keys(data[0]);
+  return (
+    <div className="max-h-[400px] overflow-auto">
+      <table className="min-w-full text-xs">
+        <thead className="sticky top-0 bg-muted/80 backdrop-blur-sm">
+          <tr>
+            {headers.map((h) => (
+              <th
+                key={h}
+                className="whitespace-nowrap border-b px-3 py-2 text-left text-xs font-semibold"
+              >
+                {h}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {data.map((row, i) => (
+            <tr key={i} className="transition-colors hover:bg-muted/30">
+              {headers.map((h) => (
+                <td
+                  key={h}
+                  className="whitespace-nowrap border-b px-3 py-1.5 text-xs tabular-nums"
+                >
+                  {formatValue(row[h])}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -172,7 +279,7 @@ function renderBarChart(chart: ChartSpec) {
         className="text-muted-foreground"
       />
       <YAxis tick={{ fontSize: 11 }} className="text-muted-foreground" tickFormatter={formatValue} />
-      <Tooltip content={<ChartTooltip />} />
+      <Tooltip content={TOOLTIP_CONTENT} />
       {series.length > 1 && <Legend wrapperStyle={{ fontSize: 11 }} />}
       {series.map((s, i) => (
         <Bar
@@ -181,6 +288,7 @@ function renderBarChart(chart: ChartSpec) {
           name={s.label || s.key}
           fill={s.color || COLORS[i % COLORS.length]}
           radius={[4, 4, 0, 0]}
+          isAnimationActive={false}
         />
       ))}
     </BarChart>
@@ -198,7 +306,7 @@ function renderLineChart(chart: ChartSpec) {
       <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
       <XAxis dataKey={xKey} tick={{ fontSize: 11 }} />
       <YAxis tick={{ fontSize: 11 }} tickFormatter={formatValue} />
-      <Tooltip content={<ChartTooltip />} />
+      <Tooltip content={TOOLTIP_CONTENT} />
       {series.length > 1 && <Legend wrapperStyle={{ fontSize: 11 }} />}
       {series.map((s, i) => (
         <Line
@@ -210,6 +318,7 @@ function renderLineChart(chart: ChartSpec) {
           strokeWidth={2}
           dot={{ r: 3 }}
           activeDot={{ r: 5 }}
+          isAnimationActive={false}
         />
       ))}
     </LineChart>
@@ -227,7 +336,7 @@ function renderAreaChart(chart: ChartSpec) {
       <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
       <XAxis dataKey={xKey} tick={{ fontSize: 11 }} />
       <YAxis tick={{ fontSize: 11 }} tickFormatter={formatValue} />
-      <Tooltip content={<ChartTooltip />} />
+      <Tooltip content={TOOLTIP_CONTENT} />
       {series.length > 1 && <Legend wrapperStyle={{ fontSize: 11 }} />}
       {series.map((s, i) => {
         const color = s.color || COLORS[i % COLORS.length];
@@ -241,6 +350,7 @@ function renderAreaChart(chart: ChartSpec) {
             fill={color}
             fillOpacity={0.15}
             strokeWidth={2}
+            isAnimationActive={false}
           />
         );
       })}
@@ -252,15 +362,9 @@ function renderPieChart(chart: ChartSpec) {
   const nameKey = chart.nameKey || chart.xKey || "name";
   const valueKey = chart.valueKey || chart.yKey || "value";
 
-  const renderLabel = (entry: Record<string, unknown>) => {
-    const name = String(entry.name ?? "");
-    const pct = Number(entry.percent ?? 0);
-    return `${name} ${(pct * 100).toFixed(0)}%`;
-  };
-
   return (
     <PieChart>
-      <Tooltip content={<ChartTooltip />} />
+      <Tooltip content={TOOLTIP_CONTENT} />
       <Legend wrapperStyle={{ fontSize: 11 }} />
       <Pie
         data={chart.data}
@@ -271,8 +375,9 @@ function renderPieChart(chart: ChartSpec) {
         outerRadius={100}
         innerRadius={40}
         paddingAngle={2}
-        label={renderLabel}
+        label={renderPieLabel}
         labelLine={{ strokeWidth: 1 }}
+        isAnimationActive={false}
       >
         {chart.data.map((_, i) => (
           <Cell key={i} fill={COLORS[i % COLORS.length]} />
@@ -280,6 +385,14 @@ function renderPieChart(chart: ChartSpec) {
       </Pie>
     </PieChart>
   );
+}
+
+// Stable reference — avoids new function on every render
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function renderPieLabel(entry: any) {
+  const name = String(entry.name ?? "");
+  const pct = Number(entry.percent ?? 0);
+  return `${name} ${(pct * 100).toFixed(0)}%`;
 }
 
 function renderComposedChart(chart: ChartSpec) {
@@ -292,7 +405,7 @@ function renderComposedChart(chart: ChartSpec) {
       <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
       <XAxis dataKey={xKey} tick={{ fontSize: 11 }} />
       <YAxis tick={{ fontSize: 11 }} tickFormatter={formatValue} />
-      <Tooltip content={<ChartTooltip />} />
+      <Tooltip content={TOOLTIP_CONTENT} />
       <Legend wrapperStyle={{ fontSize: 11 }} />
       {bars.map((s, i) => (
         <Bar
@@ -301,6 +414,7 @@ function renderComposedChart(chart: ChartSpec) {
           name={s.label || s.key}
           fill={s.color || COLORS[i % COLORS.length]}
           radius={[4, 4, 0, 0]}
+          isAnimationActive={false}
         />
       ))}
       {lines.map((s, i) => (
@@ -312,6 +426,7 @@ function renderComposedChart(chart: ChartSpec) {
           stroke={s.color || COLORS[(bars.length + i) % COLORS.length]}
           strokeWidth={2}
           dot={{ r: 3 }}
+          isAnimationActive={false}
         />
       ))}
     </ComposedChart>

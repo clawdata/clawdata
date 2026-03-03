@@ -1939,11 +1939,21 @@ async def get_session_history(
         logger.warning("Gateway not reachable for session history: %s", exc)
         return SessionHistoryResponse(session_id=session_id, agent_id=agent_id)
 
+    raw_msgs: list[dict] = []
     try:
         raw_msgs = await openclaw.get_session_history(agent_id, session_id)
     except Exception as exc:
-        logger.warning("Failed to fetch session history: %s", exc)
-        return SessionHistoryResponse(session_id=session_id, agent_id=agent_id)
+        logger.warning("Failed to fetch session history with id %s: %s", session_id, exc)
+
+    # If no results and the identifier looks like a session key (contains ':'),
+    # the gateway may expect a different identifier format.  Try the key as-is
+    # since some gateways key history by session key rather than sessionId.
+    if not raw_msgs and ":" in session_id:
+        logger.info("Retrying session history with key format: %s", session_id)
+        try:
+            raw_msgs = await openclaw.get_session_history(agent_id, session_id)
+        except Exception as exc2:
+            logger.warning("Retry also failed: %s", exc2)
 
     messages: list[SessionMessage] = []
     for m in raw_msgs:

@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils";
 import { AgentEmoji } from "@/components/agent-emoji";
 import type { ChatMessage, AgentInfo } from "./types";
 import { MarkdownContent } from "./markdown-content";
+import { ToolActivityCard } from "./tool-activity-card";
 
 interface ChatMessageBubbleProps {
   message: ChatMessage;
@@ -35,6 +36,11 @@ export function ChatMessageBubble({
   agents,
 }: ChatMessageBubbleProps) {
   const showCopy = msg.role === "user" || msg.role === "assistant";
+
+  // Tool activity messages render as cards, not bubbles
+  if (msg.role === "tool_activity" && msg.toolActivity) {
+    return <ToolActivityCard activity={msg.toolActivity} />;
+  }
 
   return (
     <div

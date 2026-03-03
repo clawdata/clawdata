@@ -309,15 +309,34 @@ def _process_stream_event(
                 or data.get("args", {}).get("agentId", "")
                 or ""
             )
+
+        # Determine event type — map phases to start/end lifecycle
+        if phase == "start":
+            evt_type = "tool_start"
+        elif phase in ("end", "complete", "result"):
+            evt_type = "tool_end"
+        else:
+            evt_type = "tool_update"
+
         content = f"{tool_name}: @{target_agent}" if target_agent else str(tool_name)
+
+        # Build enriched metadata for the frontend
+        enriched_meta = dict(data)
+        # Ensure args are truncated to prevent oversized payloads
+        if "args" in enriched_meta:
+            enriched_args = {}
+            for k, v in (enriched_meta["args"] or {}).items():
+                enriched_args[k] = str(v)[:2000] if isinstance(v, str) and len(str(v)) > 2000 else v
+            enriched_meta["args"] = enriched_args
+
         return (
             {
-                "type": "tool_start" if phase == "start" else "tool_end",
+                "type": evt_type,
                 "content": content,
                 "run_id": run_id,
                 "agent_id": agent_id,
                 "target_agent": target_agent,
-                "metadata": data,
+                "metadata": enriched_meta,
             },
             False,
             is_spawn,
