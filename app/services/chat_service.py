@@ -15,6 +15,34 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 
+# ── Unicode sanitisation (prevent ByteString encoding errors) ────────
+
+_UNICODE_REPLACEMENTS: dict[str, str] = {
+    "\u2018": "'",   # left single quote
+    "\u2019": "'",   # right single quote
+    "\u201c": '"',   # left double quote
+    "\u201d": '"',   # right double quote
+    "\u2014": "--",  # em dash
+    "\u2013": "-",   # en dash
+    "\u2026": "...", # ellipsis
+    "\u2192": "->",  # right arrow
+}
+
+# Build a single-pass translation table
+_SANITISE_TABLE = str.maketrans(_UNICODE_REPLACEMENTS)
+
+
+def _sanitise_unicode(text: str) -> str:
+    """Replace common non-Latin-1 characters that break ByteString encoding.
+
+    The OpenClaw gateway uses protobuf ByteString internally; characters
+    with code-points > 255 cause 'Cannot convert argument to a ByteString'
+    errors.  This helper swaps the most frequent offenders to safe ASCII
+    equivalents while leaving emojis (which are handled separately) alone.
+    """
+    return text.translate(_SANITISE_TABLE)
+
+
 # ── Memory helpers ───────────────────────────────────────────────────
 
 _MEMORY_CONTEXT_HEADER = (
@@ -322,7 +350,8 @@ async def send_and_stream(
     await openclaw.connect()
 
     # ── Inject memory context so agent recalls past sessions ────────
-    memory_ctx = _load_memory_context(agent_id)
+    memory_ctx = _sanitise_unicode(_load_memory_context(agent_id))
+    message = _sanitise_unicode(message)
     outgoing = f"{memory_ctx}{message}" if memory_ctx else message
 
     # ── Pre-send context traces ─────────────────────────────────────

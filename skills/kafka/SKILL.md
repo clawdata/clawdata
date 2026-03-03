@@ -1,6 +1,6 @@
 ---
 name: kafka
-description: "Work with Apache Kafka — manage topics, produce/consume messages, inspect consumer groups, and monitor clusters."
+description: "Work with Apache Kafka -- manage topics, produce/consume messages, inspect consumer groups, and monitor clusters."
 metadata: {"openclaw": {"emoji": "📨", "requires": {"bins": ["kafka-topics"]}, "tags": ["streaming", "kafka", "messaging", "events", "data"]}}
 ---
 

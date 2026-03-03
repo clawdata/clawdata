@@ -1,0 +1,129 @@
+{#---
+name: Delta Live Tables Pipeline (Python)
+description: Generate a Databricks Delta Live Tables (DLT) pipeline with bronze, silver, and gold layers following the medallion architecture.
+category: databricks
+variables: pipeline_name, source_path, source_format, catalog, schema, bronze_table, silver_table, gold_table, quality_rules
+---#}
+
+# Databricks notebook source
+
+# MAGIC %md
+# MAGIC # {{ pipeline_name }} — Delta Live Tables Pipeline
+# MAGIC
+# MAGIC Medallion architecture pipeline:
+# MAGIC - **Bronze:** Raw ingestion from `{{ source_path }}`
+# MAGIC - **Silver:** Cleaned and validated
+# MAGIC - **Gold:** Business-ready aggregations
+# MAGIC
+# MAGIC **Catalog:** `{{ catalog }}` | **Schema:** `{{ schema }}`
+
+# COMMAND ----------
+
+import dlt
+from pyspark.sql import functions as F
+
+# ── Bronze: Raw Ingestion ──────────────────────────────────────────
+
+@dlt.table(
+    name="{{ bronze_table | default('bronze_' + pipeline_name) }}",
+    comment="Raw ingestion from {{ source_path }}",
+    table_properties={
+        "quality": "bronze",
+        "pipelines.autoOptimize.managed": "true",
+    },
+)
+def bronze():
+    """Ingest raw data from {{ source_format | default('delta') }} source."""
+    {%- if source_format | default('delta') == 'json' %}
+    return (
+        spark.readStream
+        .format("cloudFiles")
+        .option("cloudFiles.format", "json")
+        .option("cloudFiles.inferColumnTypes", "true")
+        .option("cloudFiles.schemaLocation", f"/tmp/dlt/{{ pipeline_name }}/schema")
+        .load("{{ source_path }}")
+        .withColumn("_ingested_at", F.current_timestamp())
+        .withColumn("_source_file", F.input_file_name())
+    )
+    {%- elif source_format | default('delta') == 'csv' %}
+    return (
+        spark.readStream
+        .format("cloudFiles")
+        .option("cloudFiles.format", "csv")
+        .option("header", "true")
+        .option("cloudFiles.inferColumnTypes", "true")
+        .option("cloudFiles.schemaLocation", f"/tmp/dlt/{{ pipeline_name }}/schema")
+        .load("{{ source_path }}")
+        .withColumn("_ingested_at", F.current_timestamp())
+        .withColumn("_source_file", F.input_file_name())
+    )
+    {%- elif source_format | default('delta') == 'parquet' %}
+    return (
+        spark.readStream
+        .format("cloudFiles")
+        .option("cloudFiles.format", "parquet")
+        .option("cloudFiles.schemaLocation", f"/tmp/dlt/{{ pipeline_name }}/schema")
+        .load("{{ source_path }}")
+        .withColumn("_ingested_at", F.current_timestamp())
+        .withColumn("_source_file", F.input_file_name())
+    )
+    {%- else %}
+    return (
+        spark.readStream
+        .format("delta")
+        .load("{{ source_path }}")
+        .withColumn("_ingested_at", F.current_timestamp())
+    )
+    {%- endif %}
+
+
+# ── Silver: Cleaned & Validated ────────────────────────────────────
+
+@dlt.table(
+    name="{{ silver_table | default('silver_' + pipeline_name) }}",
+    comment="Cleaned and validated data from bronze",
+    table_properties={
+        "quality": "silver",
+        "pipelines.autoOptimize.managed": "true",
+    },
+)
+{%- if quality_rules %}
+{%- for rule in quality_rules %}
+@dlt.expect{% if rule.action | default('warn') == 'drop' %}_or_drop{% elif rule.action | default('warn') == 'fail' %}_or_fail{% endif %}("{{ rule.name }}", "{{ rule.expression }}")
+{%- endfor %}
+{%- else %}
+@dlt.expect_or_drop("valid_record", "1=1")
+{%- endif %}
+def silver():
+    """Clean and validate bronze data."""
+    return (
+        dlt.read_stream("{{ bronze_table | default('bronze_' + pipeline_name) }}")
+        # TODO: Add your cleaning logic here
+        # .filter(F.col("some_column").isNotNull())
+        # .withColumn("clean_col", F.trim(F.col("raw_col")))
+        .withColumn("_cleaned_at", F.current_timestamp())
+    )
+
+
+# ── Gold: Business-Ready ──────────────────────────────────────────
+
+@dlt.table(
+    name="{{ gold_table | default('gold_' + pipeline_name) }}",
+    comment="Business-ready aggregation from silver",
+    table_properties={
+        "quality": "gold",
+        "pipelines.autoOptimize.managed": "true",
+    },
+)
+def gold():
+    """Aggregate silver data for business consumption."""
+    return (
+        dlt.read("{{ silver_table | default('silver_' + pipeline_name) }}")
+        # TODO: Add your aggregation logic here
+        # .groupBy("dimension_col")
+        # .agg(
+        #     F.count("*").alias("record_count"),
+        #     F.sum("metric_col").alias("total_metric"),
+        # )
+        .withColumn("_aggregated_at", F.current_timestamp())
+    )

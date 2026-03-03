@@ -1,6 +1,6 @@
 ---
 name: bigquery
-description: "Query and manage Google BigQuery datasets — run SQL, list tables, inspect schemas, load data, and manage partitioning."
+description: "Query and manage Google BigQuery datasets -- run SQL, list tables, inspect schemas, load data, and manage partitioning."
 metadata: {"openclaw": {"emoji": "🔍", "requires": {"bins": ["bq"]}, "tags": ["database", "bigquery", "sql", "google", "cloud", "data"]}}
 ---
 

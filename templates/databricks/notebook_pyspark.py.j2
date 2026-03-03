@@ -1,0 +1,117 @@
+{#---
+name: Databricks Notebook (PySpark)
+description: Generate a PySpark notebook for Databricks with medallion-architecture patterns, widget parameters, and Unity Catalog integration.
+category: databricks
+variables: notebook_name, catalog, schema, source_table, target_table, transformation_logic, widgets
+---#}
+
+# Databricks notebook source
+
+# MAGIC %md
+# MAGIC # {{ notebook_name }}
+# MAGIC
+# MAGIC **Catalog:** `{{ catalog }}`
+# MAGIC **Schema:** `{{ schema }}`
+# MAGIC **Target:** `{{ catalog }}.{{ schema }}.{{ target_table }}`
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Parameters
+
+# COMMAND ----------
+
+{%- if widgets %}
+{%- for widget in widgets %}
+dbutils.widgets.text("{{ widget.name }}", "{{ widget.default }}", "{{ widget.label | default(widget.name) }}")
+{%- endfor %}
+{%- else %}
+dbutils.widgets.text("run_date", "", "Run Date (YYYY-MM-DD)")
+dbutils.widgets.dropdown("mode", "append", ["append", "overwrite"], "Write Mode")
+{%- endif %}
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Setup
+
+# COMMAND ----------
+
+from pyspark.sql import functions as F
+from pyspark.sql.types import *
+
+catalog = "{{ catalog }}"
+schema = "{{ schema }}"
+
+spark.sql(f"USE CATALOG {catalog}")
+spark.sql(f"USE SCHEMA {schema}")
+
+{%- if widgets %}
+{%- for widget in widgets %}
+{{ widget.name }} = dbutils.widgets.get("{{ widget.name }}")
+{%- endfor %}
+{%- else %}
+run_date = dbutils.widgets.get("run_date")
+mode = dbutils.widgets.get("mode")
+{%- endif %}
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Read Source
+
+# COMMAND ----------
+
+df_source = spark.read.table("{{ catalog }}.{{ schema }}.{{ source_table }}")
+
+print(f"Source row count: {df_source.count():,}")
+df_source.printSchema()
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Transform
+
+# COMMAND ----------
+
+{{ transformation_logic | default('# Apply transformations
+df_transformed = (
+    df_source
+    .withColumn("_processed_at", F.current_timestamp())
+    .withColumn("_source_file", F.input_file_name())
+)') }}
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Data Quality Checks
+
+# COMMAND ----------
+
+row_count = df_transformed.count()
+null_counts = {col: df_transformed.filter(F.col(col).isNull()).count() for col in df_transformed.columns}
+
+print(f"Output row count: {row_count:,}")
+for col, nulls in null_counts.items():
+    if nulls > 0:
+        print(f"  ⚠ {col}: {nulls:,} nulls ({nulls/row_count*100:.1f}%)")
+
+assert row_count > 0, "Transformation produced zero rows"
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Write Target
+
+# COMMAND ----------
+
+(
+    df_transformed
+    .write
+    .format("delta")
+    .mode({{ 'mode' if not widgets else '"append"' }})
+    .option("mergeSchema", "true")
+    .saveAsTable("{{ catalog }}.{{ schema }}.{{ target_table }}")
+)
+
+print(f"✓ Wrote {row_count:,} rows to {{ catalog }}.{{ schema }}.{{ target_table }}")

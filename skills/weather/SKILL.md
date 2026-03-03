@@ -8,7 +8,7 @@ metadata: { "openclaw": { "emoji": "🌤️" } }
 
 Get current weather conditions using the free Open-Meteo API.
 
-## IMPORTANT — How to fetch weather
+## IMPORTANT -- How to fetch weather
 
 **DO NOT use web_search or browser for weather.** Instead, use the `web_fetch` tool to call the Open-Meteo API directly. The API is free, needs no key, and returns structured JSON instantly.
 
@@ -22,7 +22,7 @@ Get current weather conditions using the free Open-Meteo API.
 
 ## Steps
 
-### Step 1 — Geocode the location
+### Step 1 -- Geocode the location
 
 Use `web_fetch` to resolve the city name to coordinates:
 
@@ -32,7 +32,7 @@ https://geocoding-api.open-meteo.com/v1/search?name=Sydney&count=1&language=en&f
 
 Replace `Sydney` with the requested city. Extract `results[0].latitude` and `results[0].longitude` from the JSON response.
 
-### Step 2 — Fetch weather
+### Step 2 -- Fetch weather
 
 Use `web_fetch` with the coordinates from Step 1:
 
@@ -74,5 +74,5 @@ Present weather clearly and concisely:
 ## Notes
 
 - No API key needed (Open-Meteo is free for non-commercial use)
-- Always geocode first — don't hardcode coordinates
+- Always geocode first -- don't hardcode coordinates
 - Timezone is auto-detected from coordinates

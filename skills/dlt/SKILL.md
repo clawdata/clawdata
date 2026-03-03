@@ -1,6 +1,6 @@
 ---
 name: dlt
-description: "Build data ingestion pipelines with dlt (data load tool) — extract from APIs, databases, and files, then load to any destination."
+description: "Build data ingestion pipelines with dlt (data load tool) -- extract from APIs, databases, and files, then load to any destination."
 metadata: {"openclaw": {"emoji": "🔄", "requires": {"bins": ["dlt"]}, "tags": ["ingestion", "dlt", "etl", "elt", "pipeline", "data"]}}
 ---
 
@@ -99,7 +99,7 @@ pipeline.run(source)
 
 ## Best Practices
 
-- Use `dlt.secrets` and `dlt.config` for credentials — never hardcode
+- Use `dlt.secrets` and `dlt.config` for credentials -- never hardcode
 - Choose `write_disposition` carefully: `replace`, `append`, or `merge`
 - Define `primary_key` for merge operations
 - Use `dlt.sources.incremental` for efficient incremental loads

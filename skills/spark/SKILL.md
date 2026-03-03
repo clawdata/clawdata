@@ -1,6 +1,6 @@
 ---
 name: spark
-description: "Build and run Apache Spark jobs — submit applications, run interactive queries, manage data processing pipelines."
+description: "Build and run Apache Spark jobs -- submit applications, run interactive queries, manage data processing pipelines."
 metadata: {"openclaw": {"emoji": "⚡", "requires": {"bins": ["spark-submit"]}, "tags": ["processing", "spark", "big-data", "etl", "data"]}}
 ---
 
@@ -129,7 +129,7 @@ spark = (
 
 - Enable Adaptive Query Execution (AQE) for automatic optimisation
 - Use `repartition()` or `coalesce()` to control output file count
-- Avoid `collect()` on large datasets — use `show()`, `take()`, or write to storage
+- Avoid `collect()` on large datasets -- use `show()`, `take()`, or write to storage
 - Cache intermediate DataFrames only when reused multiple times
 - Use Delta Lake for ACID transactions and time travel
 - Broadcast small tables in joins: `F.broadcast(small_df)`

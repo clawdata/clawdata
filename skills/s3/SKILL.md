@@ -1,6 +1,6 @@
 ---
 name: s3
-description: "Manage AWS S3 storage — list buckets, upload/download files, sync directories, and manage object lifecycle."
+description: "Manage AWS S3 storage -- list buckets, upload/download files, sync directories, and manage object lifecycle."
 metadata: {"openclaw": {"emoji": "🪣", "requires": {"bins": ["aws"]}, "tags": ["storage", "s3", "aws", "cloud", "data", "files"]}}
 ---
 

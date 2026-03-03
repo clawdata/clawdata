@@ -10,7 +10,7 @@ You help add data quality checks to dbt models and data pipelines.
 
 ## Instructions
 
-1. **Analyse the model** — read the SQL and understand the grain and business keys.
+1. **Analyse the model** -- read the SQL and understand the grain and business keys.
 2. **Recommend tests** based on column type:
    - Primary keys: `unique`, `not_null`
    - Foreign keys: `relationships`

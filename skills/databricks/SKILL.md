@@ -1,125 +1,96 @@
 ---
 name: databricks
-description: "Work with Databricks — manage clusters, run notebooks, execute SQL queries, and interact with Unity Catalog."
-metadata: {"openclaw": {"emoji": "🧱", "requires": {"bins": ["databricks"]}, "tags": ["databricks", "spark", "sql", "cloud", "data", "lakehouse"]}}
+description: "Work with Databricks -- run SQL via curl, manage clusters, warehouses, Unity Catalog, jobs, and pipelines."
+metadata: {"openclaw": {"emoji": "🧱", "requires": {"bins": ["databricks"]}, "tags": ["databricks", "spark", "sql", "cloud", "data", "lakehouse", "delta", "unity-catalog"]}}
 ---
 
-# Databricks
+# Databricks Skill
 
-You help manage Databricks workspaces using the **`databricks`** CLI.
-Use this when the user asks about Databricks clusters, notebooks, SQL, or Unity Catalog.
+## RULES -- You MUST follow these
 
-## Authentication
+1. Run `source ~/.zshrc` as the FIRST line in EVERY shell command
+2. Environment variables `DATABRICKS_HOST`, `DATABRICKS_TOKEN`, `DATABRICKS_WAREHOUSE_ID` are set in `~/.zshrc` -- use them directly
+3. NEVER ask the user for credentials, host, token, or warehouse ID
+4. NEVER use placeholders like `<your-token>` -- always use `${DATABRICKS_HOST}` etc.
+5. To run SQL: use `curl` with the SQL Statement API (pattern below). Do NOT use `databricks sql` -- it does not work.
+6. Execute commands immediately. Do not ask "would you like me to run this?"
+7. If the user says "create a table" or "run SQL" -- build the curl command and run it right away
+8. If the user does not specify a schema, use `default`
 
-Ensure the user has configured the Databricks CLI:
-
-```bash
-databricks configure --token
-```
-
-Or set environment variables: `DATABRICKS_HOST` and `DATABRICKS_TOKEN`.
-
-## Commands
-
-### Workspace
-
-#### List workspace contents
+## How to Run SQL -- Use This Exact Pattern
 
 ```bash
-databricks workspace ls /Users/<user>
+source ~/.zshrc
+curl -s -X POST "${DATABRICKS_HOST}/api/2.0/sql/statements" \
+  -H "Authorization: Bearer ${DATABRICKS_TOKEN}" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "warehouse_id": "'"${DATABRICKS_WAREHOUSE_ID}"'",
+    "statement": "YOUR_SQL_HERE",
+    "wait_timeout": "30s",
+    "disposition": "INLINE"
+  }' | jq '{state: .status.state, data: .result.data_array}'
 ```
 
-#### Import a notebook
+Replace `YOUR_SQL_HERE` with the actual SQL. Always pipe through `jq`.
+
+## Example: "Create a dummy table"
+
+Step 1 -- create table:
+```bash
+source ~/.zshrc
+curl -s -X POST "${DATABRICKS_HOST}/api/2.0/sql/statements" \
+  -H "Authorization: Bearer ${DATABRICKS_TOKEN}" \
+  -H "Content-Type: application/json" \
+  -d '{"warehouse_id":"'"${DATABRICKS_WAREHOUSE_ID}"'","statement":"CREATE TABLE IF NOT EXISTS default.test_customers (id INT, name STRING, email STRING, created_at TIMESTAMP) USING DELTA","wait_timeout":"30s","disposition":"INLINE"}' | jq '.status.state'
+```
+
+Step 2 -- insert data:
+```bash
+source ~/.zshrc
+curl -s -X POST "${DATABRICKS_HOST}/api/2.0/sql/statements" \
+  -H "Authorization: Bearer ${DATABRICKS_TOKEN}" \
+  -H "Content-Type: application/json" \
+  -d '{"warehouse_id":"'"${DATABRICKS_WAREHOUSE_ID}"'","statement":"INSERT INTO default.test_customers VALUES (1, '"'"'Alice'"'"', '"'"'alice@test.com'"'"', current_timestamp()), (2, '"'"'Bob'"'"', '"'"'bob@test.com'"'"', current_timestamp()), (3, '"'"'Carol'"'"', '"'"'carol@test.com'"'"', current_timestamp())","wait_timeout":"30s","disposition":"INLINE"}' | jq '.status.state'
+```
+
+Step 3 -- verify:
+```bash
+source ~/.zshrc
+curl -s -X POST "${DATABRICKS_HOST}/api/2.0/sql/statements" \
+  -H "Authorization: Bearer ${DATABRICKS_TOKEN}" \
+  -H "Content-Type: application/json" \
+  -d '{"warehouse_id":"'"${DATABRICKS_WAREHOUSE_ID}"'","statement":"SELECT * FROM default.test_customers","wait_timeout":"30s","disposition":"INLINE"}' | jq '.result.data_array'
+```
+
+## Useful SQL Patterns
+
+- Show tables: `"statement": "SHOW TABLES IN default"`
+- Describe table: `"statement": "DESCRIBE TABLE default.my_table"`
+- Row count: `"statement": "SELECT COUNT(*) FROM default.my_table"` then `| jq '.result.data_array[0][0]'`
+- Column names: `| jq '[.manifest.schema.columns[].name]'`
+
+## Verify Environment
 
 ```bash
-databricks workspace import <local_path> <remote_path> --language PYTHON
+source ~/.zshrc
+echo "HOST=${DATABRICKS_HOST} WAREHOUSE=${DATABRICKS_WAREHOUSE_ID} TOKEN=$([ -n \"${DATABRICKS_TOKEN}\" ] && echo set || echo MISSING)"
 ```
 
-#### Export a notebook
+## Databricks CLI Reference
 
-```bash
-databricks workspace export <remote_path> <local_path>
-```
-
-### Clusters
-
-#### List clusters
-
-```bash
-databricks clusters list --output JSON
-```
-
-#### Start a cluster
-
-```bash
-databricks clusters start --cluster-id <cluster_id>
-```
-
-#### Get cluster status
-
-```bash
-databricks clusters get --cluster-id <cluster_id>
-```
-
-### SQL (Databricks SQL)
-
-#### Execute a SQL query
-
-```bash
-databricks sql execute --sql "SELECT * FROM <catalog>.<schema>.<table> LIMIT 10"
-```
-
-#### List SQL warehouses
-
-```bash
-databricks sql warehouses list
-```
-
-### Unity Catalog
-
-#### List catalogs
-
-```bash
-databricks unity-catalog catalogs list
-```
-
-#### List schemas
-
-```bash
-databricks unity-catalog schemas list --catalog-name <catalog>
-```
-
-#### List tables
-
-```bash
-databricks unity-catalog tables list --catalog-name <catalog> --schema-name <schema>
-```
-
-#### Describe a table
-
-```bash
-databricks unity-catalog tables get --full-name <catalog>.<schema>.<table>
-```
-
-### Jobs
-
-#### List jobs
-
-```bash
-databricks jobs list --output JSON
-```
-
-#### Run a job
-
-```bash
-databricks jobs run-now --job-id <job_id>
-```
+- Clusters: `databricks clusters list --output JSON` / `start --cluster-id ID` / `delete --cluster-id ID`
+- Warehouses: `databricks sql warehouses list --output JSON` / `start $DATABRICKS_WAREHOUSE_ID` / `stop $DATABRICKS_WAREHOUSE_ID`
+- Workspace: `databricks workspace ls /path` / `import local remote --language PYTHON`
+- Unity Catalog: `databricks unity-catalog catalogs list` / `schemas list --catalog-name CAT` / `tables list --catalog-name CAT --schema-name SCH`
+- Jobs: `databricks jobs list --output JSON` / `run-now --job-id ID` / `create --json @file.json`
+- Pipelines: `databricks pipelines list --output JSON` / `start-update --pipeline-id ID`
+- Secrets: `databricks secrets list-scopes` / `put-secret --scope S --key K --string-value V`
+- Volumes: `databricks fs ls dbfs:/Volumes/catalog/schema/volume/` / `cp local dbfs:/path`
 
 ## Best Practices
 
-- Use Unity Catalog for data governance and access control
-- Prefer SQL warehouses for analytical queries (cost-effective)
-- Use Delta Lake format for all tables
-- Apply liquid clustering instead of manual partitioning
-- Use job clusters instead of all-purpose clusters for production
-- Follow the medallion architecture (bronze → silver → gold)
+- Always `source ~/.zshrc` first -- never skip this
+- Use curl + SQL Statement API for all SQL (not `databricks sql`)
+- Use Delta format, default schema, jq for output
+- Check warehouse state: `databricks sql warehouses get $DATABRICKS_WAREHOUSE_ID --output JSON | jq -r '.state'`

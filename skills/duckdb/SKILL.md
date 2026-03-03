@@ -1,6 +1,6 @@
 ---
 name: duckdb
-description: "Query and explore a local DuckDB warehouse — list tables, inspect schemas, run SQL, ingest CSV/JSON/Parquet files."
+description: "Query and explore a local DuckDB warehouse -- list tables, inspect schemas, run SQL, ingest CSV/JSON/Parquet files."
 metadata: {"openclaw": {"emoji": "🦆", "requires": {"bins": ["duckdb"]}, "tags": ["database", "duckdb", "sql", "query", "data"]}}
 ---
 
@@ -85,7 +85,7 @@ duckdb userdata/warehouse.duckdb -c "CREATE TABLE <name> AS SELECT * FROM read_j
 
 ### Query a file directly (without loading)
 
-DuckDB can query files in place — no need to import first:
+DuckDB can query files in place -- no need to import first:
 
 ```bash
 duckdb -c "SELECT * FROM read_csv_auto('templates/sampledata/sample_customers.csv') LIMIT 5;"
@@ -99,13 +99,13 @@ duckdb userdata/warehouse.duckdb -c "COPY (SELECT * FROM <table>) TO '<output.cs
 
 ## When to Use
 
-- User asks "what data do I have?" → `SHOW TABLES;` then `DESCRIBE <table>;`
-- User asks to see sample data → `SELECT * FROM <table> LIMIT 5;`
-- User asks to load a file → `CREATE TABLE ... AS SELECT * FROM read_csv_auto(...)` (or parquet/json)
-- User asks a data question → write SQL and run it
-- User asks about row counts, aggregations, filters → write and run the appropriate SQL
-- User wants to explore a CSV/Parquet/JSON without loading → query the file directly with `read_csv_auto()` / `read_parquet()` / `read_json_auto()`
-- User asks for analysis → run queries, then present results using charts and tables (see Analysis Workflow below)
+- User asks "what data do I have?" -> `SHOW TABLES;` then `DESCRIBE <table>;`
+- User asks to see sample data -> `SELECT * FROM <table> LIMIT 5;`
+- User asks to load a file -> `CREATE TABLE ... AS SELECT * FROM read_csv_auto(...)` (or parquet/json)
+- User asks a data question -> write SQL and run it
+- User asks about row counts, aggregations, filters -> write and run the appropriate SQL
+- User wants to explore a CSV/Parquet/JSON without loading -> query the file directly with `read_csv_auto()` / `read_parquet()` / `read_json_auto()`
+- User asks for analysis -> run queries, then present results using charts and tables (see Analysis Workflow below)
 
 ## Analysis Workflow
 
@@ -115,7 +115,7 @@ When the user asks for analysis, follow this pattern:
 2. **Present key metrics** in a summary markdown table
 3. **Produce charts** using `chart` fenced code blocks with JSON specs (see SOUL.md for format)
 4. **Show detail tables** in markdown format
-5. **Provide insights** — bullet points explaining what the data tells us
+5. **Provide insights** -- bullet points explaining what the data tells us
 
 ### Example: Producing a Chart from Query Results
 
@@ -192,7 +192,7 @@ GROUP BY 1 ORDER BY total_amount DESC;
 - Use `-json` flag for JSON output: `duckdb userdata/warehouse.duckdb -json -c "..."`
 - Use `-csv` flag for CSV output: `duckdb userdata/warehouse.duckdb -csv -c "..."`
 - Default output is column-aligned plain text
-- **Prefer `-json` for analysis** — it's easiest to transform into chart specs
+- **Prefer `-json` for analysis** -- it's easiest to transform into chart specs
 
 ## Tips
 
@@ -202,11 +202,11 @@ GROUP BY 1 ORDER BY total_amount DESC;
 - **String matching**: Use `ILIKE` for case-insensitive matching
 - **Sampling**: `SELECT * FROM <table> USING SAMPLE 100;` for random samples
 - DuckDB supports full SQL (joins, subqueries, CTEs, window functions)
-- Exit code 1 means failure — check stderr for the error message
+- Exit code 1 means failure -- check stderr for the error message
 
 ## Notes
 
 - Database file: `userdata/warehouse.duckdb` (created automatically on first use)
 - DuckDB natively reads CSV, Parquet, JSON, and Excel files
-- No server needed — DuckDB is an embedded database
+- No server needed -- DuckDB is an embedded database
 - The database file is safe to delete and rebuild from source files

@@ -41,5 +41,5 @@ You review SQL code and dbt models for quality, performance, and best practices.
 |---|----------|------|-------|-----|
 | 1 | warning | 12 | SELECT * used | List columns explicitly |
 | 2 | error | - | Missing schema.yml | Add schema.yml with unique + not_null tests on order_id |
-| 3 | info | 8 | Consider incremental | Large table — add incremental materialisation |
+| 3 | info | 8 | Consider incremental | Large table -- add incremental materialisation |
 ```

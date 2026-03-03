@@ -1,6 +1,6 @@
 ---
 name: metabase
-description: "Manage Metabase dashboards and questions — create questions, manage collections, and interact with the Metabase API."
+description: "Manage Metabase dashboards and questions -- create questions, manage collections, and interact with the Metabase API."
 metadata: {"openclaw": {"emoji": "📊", "tags": ["bi", "metabase", "dashboard", "analytics", "visualization", "data"]}}
 ---
 
@@ -13,7 +13,7 @@ Use this when the user asks about dashboards, questions, collections, or Metabas
 
 Metabase uses session tokens. Set these environment variables:
 
-- `METABASE_URL` — e.g. `http://localhost:3000`
+- `METABASE_URL` -- e.g. `http://localhost:3000`
 - `METABASE_USERNAME`
 - `METABASE_PASSWORD`
 

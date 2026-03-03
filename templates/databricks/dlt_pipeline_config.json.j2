@@ -1,0 +1,42 @@
+{#---
+name: DLT Pipeline Configuration
+description: Generate a Databricks Delta Live Tables pipeline settings JSON for deployment via CLI or Terraform.
+category: databricks
+variables: pipeline_name, catalog, schema, notebook_path, target_schema, storage, cluster_workers, photon, continuous, channel
+---#}
+
+{
+  "name": "{{ pipeline_name }}",
+  "catalog": "{{ catalog }}",
+  "target": "{{ target_schema | default(schema) }}",
+  {%- if storage %}
+  "storage": "{{ storage }}",
+  {%- endif %}
+  "configuration": {
+    "pipelines.enableTrackHistory": "true"
+  },
+  "libraries": [
+    {
+      "notebook": {
+        "path": "{{ notebook_path }}"
+      }
+    }
+  ],
+  "clusters": [
+    {
+      "label": "default",
+      "num_workers": {{ cluster_workers | default(2) }},
+      {%- if photon | default(true) %}
+      "custom_tags": {
+        "cluster_type": "dlt",
+        "pipeline": "{{ pipeline_name }}"
+      }
+      {%- endif %}
+    }
+  ],
+  "photon": {{ photon | default(true) | tojson }},
+  "continuous": {{ continuous | default(false) | tojson }},
+  "development": true,
+  "channel": "{{ channel | default('CURRENT') }}",
+  "edition": "ADVANCED"
+}

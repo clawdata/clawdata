@@ -1,6 +1,6 @@
 ---
 name: postgres
-description: "Query and manage PostgreSQL databases — run SQL, inspect schemas, manage tables, and perform database administration."
+description: "Query and manage PostgreSQL databases -- run SQL, inspect schemas, manage tables, and perform database administration."
 metadata: {"openclaw": {"emoji": "🐘", "requires": {"bins": ["psql"]}, "tags": ["database", "postgres", "sql", "query", "data"]}}
 ---
 

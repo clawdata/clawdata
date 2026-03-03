@@ -1,6 +1,6 @@
 ---
 name: dagster
-description: "Build and manage Dagster data pipelines — create assets, jobs, schedules, sensors, and resources."
+description: "Build and manage Dagster data pipelines -- create assets, jobs, schedules, sensors, and resources."
 metadata: {"openclaw": {"emoji": "🗡️", "requires": {"bins": ["dagster"]}, "tags": ["orchestration", "dagster", "pipeline", "etl", "data"]}}
 ---
 
@@ -15,19 +15,19 @@ A typical Dagster project:
 
 ```
 my_project/
-├── my_project/
-│   ├── __init__.py
-│   ├── assets/
-│   │   ├── __init__.py
-│   │   ├── ingestion.py
-│   │   └── transformations.py
-│   ├── resources/
-│   │   └── __init__.py
-│   ├── jobs.py
-│   ├── schedules.py
-│   └── sensors.py
-├── pyproject.toml
-└── setup.py
+|-- my_project/
+|   |-- __init__.py
+|   |-- assets/
+|   |   |-- __init__.py
+|   |   |-- ingestion.py
+|   |   \-- transformations.py
+|   |-- resources/
+|   |   \-- __init__.py
+|   |-- jobs.py
+|   |-- schedules.py
+|   \-- sensors.py
+|-- pyproject.toml
+\-- setup.py
 ```
 
 ## Commands

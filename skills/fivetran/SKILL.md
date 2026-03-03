@@ -1,6 +1,6 @@
 ---
 name: fivetran
-description: "Manage Fivetran connectors and syncs — list connectors, trigger syncs, check status, and manage schemas."
+description: "Manage Fivetran connectors and syncs -- list connectors, trigger syncs, check status, and manage schemas."
 metadata: {"openclaw": {"emoji": "🔗", "tags": ["ingestion", "fivetran", "etl", "connector", "sync", "data"]}}
 ---
 

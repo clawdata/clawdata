@@ -1,6 +1,6 @@
 ---
 name: snowflake
-description: "Query and manage Snowflake data warehouses — run SQL, manage warehouses, inspect schemas, and control access."
+description: "Query and manage Snowflake data warehouses -- run SQL, manage warehouses, inspect schemas, and control access."
 metadata: {"openclaw": {"emoji": "❄️", "requires": {"bins": ["snow"]}, "tags": ["database", "snowflake", "sql", "cloud", "data", "warehouse"]}}
 ---
 
@@ -110,7 +110,7 @@ snow sql -q "CREATE FILE FORMAT IF NOT EXISTS my_csv_format TYPE = 'CSV' FIELD_D
 ## Best Practices
 
 - Always set `AUTO_SUSPEND` on warehouses to avoid idle costs
-- Use appropriate warehouse sizes — start small, scale up as needed
+- Use appropriate warehouse sizes -- start small, scale up as needed
 - Prefer `TRANSIENT` tables for staging/temporary data
 - Use clustering keys on large tables filtered by specific columns
 - Leverage Time Travel for recovering data (`AT`/`BEFORE` clauses)

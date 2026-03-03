@@ -1,0 +1,93 @@
+{#---
+name: Databricks Job Definition
+description: Generate a Databricks job JSON definition with task orchestration, clusters, and scheduling.
+category: databricks
+variables: job_name, tasks, schedule_cron, catalog, schema, email_notifications, cluster_spec
+---#}
+
+{
+  "name": "{{ job_name }}",
+  "tags": {
+    "project": "{{ catalog | default('data-platform') }}",
+    "team": "data-engineering",
+    "managed_by": "clawdata"
+  },
+  {%- if schedule_cron %}
+  "schedule": {
+    "quartz_cron_expression": "{{ schedule_cron | default('0 0 6 * * ?') }}",
+    "timezone_id": "UTC",
+    "pause_status": "UNPAUSED"
+  },
+  {%- endif %}
+  "max_concurrent_runs": 1,
+  "timeout_seconds": 3600,
+  {%- if email_notifications %}
+  "email_notifications": {
+    "on_failure": {{ email_notifications | tojson }},
+    "no_alert_for_skipped_runs": true
+  },
+  {%- endif %}
+  "job_clusters": [
+    {
+      "job_cluster_key": "{{ job_name }}_cluster",
+      {%- if cluster_spec %}
+      "new_cluster": {{ cluster_spec | tojson }}
+      {%- else %}
+      "new_cluster": {
+        "spark_version": "15.4.x-scala2.12",
+        "node_type_id": "Standard_DS3_v2",
+        "num_workers": 2,
+        "autotermination_minutes": 20,
+        "spark_conf": {
+          "spark.databricks.delta.preview.enabled": "true"
+        },
+        "data_security_mode": "SINGLE_USER",
+        "runtime_engine": "PHOTON"
+      }
+      {%- endif %}
+    }
+  ],
+  "tasks": [
+    {%- for task in tasks %}
+    {
+      "task_key": "{{ task.key }}",
+      {%- if task.depends_on is defined %}
+      "depends_on": [
+        {%- for dep in task.depends_on %}
+        {"task_key": "{{ dep }}"}{{ ',' if not loop.last else '' }}
+        {%- endfor %}
+      ],
+      {%- endif %}
+      {%- if task.type | default('notebook') == 'notebook' %}
+      "notebook_task": {
+        "notebook_path": "{{ task.notebook_path }}",
+        "base_parameters": {{ task.parameters | default({}) | tojson }},
+        "source": "WORKSPACE"
+      },
+      {%- elif task.type == 'sql' %}
+      "sql_task": {
+        "query": {
+          "query_id": "{{ task.query_id }}"
+        },
+        "warehouse_id": "{{ task.warehouse_id }}"
+      },
+      {%- elif task.type == 'dbt' %}
+      "dbt_task": {
+        "project_directory": "{{ task.project_directory }}",
+        "commands": {{ task.commands | default(['dbt run', 'dbt test']) | tojson }},
+        "warehouse_id": "{{ task.warehouse_id }}",
+        "catalog": "{{ catalog }}",
+        "schema": "{{ schema }}"
+      },
+      {%- elif task.type == 'pipeline' %}
+      "pipeline_task": {
+        "pipeline_id": "{{ task.pipeline_id }}",
+        "full_refresh": {{ task.full_refresh | default(false) | tojson }}
+      },
+      {%- endif %}
+      "job_cluster_key": "{{ job_name }}_cluster",
+      "timeout_seconds": {{ task.timeout | default(1800) }}
+    }{{ ',' if not loop.last else '' }}
+    {%- endfor %}
+  ]
+}
