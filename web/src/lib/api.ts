@@ -387,6 +387,19 @@ export interface SessionsResponse {
   sessions: SessionEntry[];
 }
 
+export interface SessionMessage {
+  role: string;
+  content: string;
+  timestamp: string | null;
+  tool_name: string | null;
+}
+
+export interface SessionHistoryResponse {
+  messages: SessionMessage[];
+  session_id: string;
+  agent_id: string;
+}
+
 export interface AgentDetail {
   id: string;
   name: string;
@@ -610,6 +623,8 @@ export const lifecycleApi = {
     api<ActionResult>(`/api/openclaw/sessions/${key}/reset`, { method: "POST" }),
   deleteSession: (key: string) =>
     api<ActionResult>(`/api/openclaw/sessions/${key}`, { method: "DELETE" }),
+  sessionHistory: (agentId: string, sessionId: string) =>
+    api<SessionHistoryResponse>(`/api/openclaw/agents/${agentId}/sessions/${sessionId}/history`),
   // Workspace skills (SKILL.md)
   projectSkills: () =>
     api<WorkspaceSkill[]>(`/api/openclaw/project-skills`),

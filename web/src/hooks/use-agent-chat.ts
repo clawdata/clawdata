@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { chatWsUrl, type SessionEntry } from "@/lib/api";
+import { chatWsUrl, lifecycleApi, type SessionEntry } from "@/lib/api";
 import type { ChatMessage, TraceEvent, AgentInfo } from "@/components/chat/types";
 
 export interface UseAgentChatOptions {
@@ -442,9 +442,38 @@ export function useAgentChat(
       setTraceEvents([]);
       traceSeqRef.current = 0;
       setSessionKey(session.key);
-      setTimeout(() => connect(), 100);
+
+      // Load session history before reconnecting
+      if (session.session_id && agentId) {
+        lifecycleApi
+          .sessionHistory(agentId, session.session_id)
+          .then((resp) => {
+            if (resp.messages && resp.messages.length > 0) {
+              const historyMsgs: ChatMessage[] = resp.messages.map((m) => ({
+                role: (m.role === "user" || m.role === "assistant"
+                  ? m.role
+                  : "system") as ChatMessage["role"],
+                content: m.content,
+                timestamp: m.timestamp ? new Date(m.timestamp) : new Date(),
+              }));
+              setMessages((prev) => {
+                // Keep the "Resuming session" message, then add history
+                const systemMsgs = prev.filter((m) => m.role === "system");
+                return [...systemMsgs, ...historyMsgs];
+              });
+            }
+          })
+          .catch((err) => {
+            console.warn("Failed to load session history:", err);
+          })
+          .finally(() => {
+            setTimeout(() => connect(), 100);
+          });
+      } else {
+        setTimeout(() => connect(), 100);
+      }
     },
-    [connect],
+    [connect, agentId],
   );
 
   /* ── Auto-connect on agent change ──────────────────────────────── */

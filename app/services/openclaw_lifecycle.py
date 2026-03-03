@@ -52,6 +52,8 @@ from app.schemas.lifecycle import (
     Provider,
     ProvidersResponse,
     SessionEntry,
+    SessionHistoryResponse,
+    SessionMessage,
     SessionsResponse,
     SetupRequest,
     SetupResult,
@@ -1923,6 +1925,55 @@ async def delete_session(key: str) -> ActionResult:
         return ActionResult(success=True, message=f"Session deleted")
     except Exception as exc:
         return ActionResult(success=False, message=str(exc))
+
+
+async def get_session_history(
+    agent_id: str, session_id: str,
+) -> SessionHistoryResponse:
+    """Fetch message history for a specific session."""
+    from app.adapters.openclaw import openclaw
+
+    try:
+        await openclaw.connect()
+    except (ConnectionRefusedError, ConnectionError, OSError) as exc:
+        logger.warning("Gateway not reachable for session history: %s", exc)
+        return SessionHistoryResponse(session_id=session_id, agent_id=agent_id)
+
+    try:
+        raw_msgs = await openclaw.get_session_history(agent_id, session_id)
+    except Exception as exc:
+        logger.warning("Failed to fetch session history: %s", exc)
+        return SessionHistoryResponse(session_id=session_id, agent_id=agent_id)
+
+    messages: list[SessionMessage] = []
+    for m in raw_msgs:
+        role = m.get("role", "")
+        # Skip system/tool messages that aren't useful for display
+        if role in ("tool", "toolResult"):
+            continue
+        content = m.get("content", "")
+        # Handle content that may be a list of parts (multimodal)
+        if isinstance(content, list):
+            text_parts = [
+                p.get("text", "")
+                for p in content
+                if isinstance(p, dict) and p.get("type") == "text"
+            ]
+            content = "\n".join(text_parts)
+        if not content or not content.strip():
+            continue
+        messages.append(SessionMessage(
+            role=role,
+            content=content,
+            timestamp=m.get("timestamp") or m.get("ts"),
+            tool_name=m.get("toolName") or m.get("name"),
+        ))
+
+    return SessionHistoryResponse(
+        messages=messages,
+        session_id=session_id,
+        agent_id=agent_id,
+    )
 
 
 # ── Workspace skills (SKILL.md) ─────────────────────────────────────

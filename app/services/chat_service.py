@@ -46,11 +46,11 @@ def _sanitise_unicode(text: str) -> str:
 # ── Memory helpers ───────────────────────────────────────────────────
 
 _MEMORY_CONTEXT_HEADER = (
-    "[SYSTEM — WORKSPACE FILE SNAPSHOT]\n"
-    "The following is a snapshot of YOUR workspace files (the files you read/write "
-    "with your file tools). This is provided so you have context from previous "
-    "sessions without needing to read every file first. These are YOUR files — "
-    "continue to update them as instructed in AGENTS.md."
+    "[SYSTEM -- WORKSPACE FILE SNAPSHOT]\n"
+    "Below is a CURRENT snapshot of your workspace files. "
+    "DO NOT re-read these files with your tools -- you already have their full contents here. "
+    "Only use your file tools to WRITE updates or to read files NOT listed below. "
+    "These are YOUR files -- continue to update them as instructed in AGENTS.md."
 )
 _MEMORY_CONTEXT_FOOTER = "[END WORKSPACE SNAPSHOT]"
 
@@ -64,26 +64,39 @@ def _agent_workspace(agent_id: str) -> Path:
 
 
 def _has_filled_fields(content: str) -> bool:
-    """Return True if a markdown file has fields with actual values filled in.
+    """Return True if a markdown file has meaningful content beyond headings/placeholders.
 
-    Detects both ``- **Name:** Sean`` and ``- Name: Sean`` patterns.
+    Detects bullet fields (``- **Name:** Sean``, ``- Name: Sean``),
+    plain ``Key: Value`` lines, and any non-heading non-blank text.
     """
     for line in content.splitlines():
-        line = line.strip()
-        if not line.startswith("- "):
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
             continue
-        # Bold format: "- **Label:** Value"
-        if ":**" in line:
-            after_colon = line.split(":**", 1)[1].strip()
-            if after_colon and after_colon not in (
-                "_", "_(unspecified)_", "_(optional)_",
-            ):
-                return True
-        # Plain format: "- Label: Value" (agent may write without bold)
-        elif ": " in line:
-            after_colon = line.split(": ", 1)[1].strip()
+        # Skip pure placeholder/italic lines
+        if stripped.startswith("_") and stripped.endswith("_") and len(stripped) > 2:
+            continue
+        # Bullet field: "- **Label:** Value" or "- Label: Value"
+        if stripped.startswith("- "):
+            if ":**" in stripped:
+                after_colon = stripped.split(":**", 1)[1].strip()
+                if after_colon and after_colon not in (
+                    "_", "_(unspecified)_", "_(optional)_",
+                ):
+                    return True
+            elif ": " in stripped:
+                after_colon = stripped.split(": ", 1)[1].strip()
+                if after_colon and not after_colon.startswith("_("):
+                    return True
+            continue
+        # Plain "Key: Value" lines (e.g. IDENTITY.md uses this format)
+        if ": " in stripped:
+            after_colon = stripped.split(": ", 1)[1].strip()
             if after_colon and not after_colon.startswith("_("):
                 return True
+        # Any other non-trivial text
+        if len(stripped) > 3:
+            return True
     return False
 
 
@@ -117,7 +130,13 @@ def _load_memory_context(agent_id: str) -> str:
     memory_file = workspace / "MEMORY.md"
     if memory_file.exists():
         content = memory_file.read_text().strip()
-        if content and content != "# Memory\n\n_Long-term curated memory. Update this with important facts, decisions, and context._":
+        # Skip if file only has the default template
+        _is_default = (
+            not content
+            or content.startswith("# Memory\n\n_Long-term curated memory")
+            or not _has_filled_fields(content)
+        )
+        if not _is_default:
             parts.append(f"[MEMORY.md]\n{content}")
 
     # 4. TOOLS.md — tool notes, available templates & sample data paths
@@ -127,7 +146,14 @@ def _load_memory_context(agent_id: str) -> str:
         if content and content != "# Tool Notes":
             parts.append(f"[TOOLS.md]\n{content}")
 
-    # 5. Recent daily memory files (today + 2 days back)
+    # 5. SOUL.md — agent persona (provides continuity context)
+    soul_file = workspace / "SOUL.md"
+    if soul_file.exists():
+        content = soul_file.read_text().strip()
+        if content and _has_filled_fields(content):
+            parts.append(f"[SOUL.md]\n{content}")
+
+    # 6. Recent daily memory files (today + 2 days back)
     memory_dir = workspace / "memory"
     if memory_dir.exists():
         today = datetime.date.today()

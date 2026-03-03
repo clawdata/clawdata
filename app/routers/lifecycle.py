@@ -37,6 +37,7 @@ from app.schemas.lifecycle import (
     OnboardingStatus,
     OpenClawAgentsList,
     ProvidersResponse,
+    SessionHistoryResponse,
     SessionsResponse,
     SetupRequest,
     SetupResult,
@@ -341,6 +342,10 @@ async def delete_session(key: str):
     """Delete a session."""
     return await lifecycle.delete_session(key)
 
+@router.get("/agents/{agent_id}/sessions/{session_id}/history", response_model=SessionHistoryResponse)
+async def get_session_history(agent_id: str, session_id: str):
+    """Fetch message history for a specific session."""
+    return await lifecycle.get_session_history(agent_id, session_id)
 
 # ── Workspace skills (SKILL.md) ───────────────────────────────────
 

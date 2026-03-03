@@ -420,6 +420,23 @@ class SessionsResponse(BaseModel):
     sessions: list[SessionEntry] = Field(default_factory=list)
 
 
+class SessionMessage(BaseModel):
+    """A single message from session history."""
+
+    role: str  # user | assistant | system | tool
+    content: str = ""
+    timestamp: str | None = None
+    tool_name: str | None = None
+
+
+class SessionHistoryResponse(BaseModel):
+    """Response for session history."""
+
+    messages: list[SessionMessage] = Field(default_factory=list)
+    session_id: str = ""
+    agent_id: str = ""
+
+
 # ── Agent detail ─────────────────────────────────────────────────────
 
 

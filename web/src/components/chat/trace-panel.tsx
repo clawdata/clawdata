@@ -159,7 +159,16 @@ function buildPreview(evt: TraceEvent): string {
 
   if (delegationEvent)
     return `${delegationEvent}${delegationMsg ? ` — ${delegationMsg}` : ""}`;
-  if (toolName) return `${toolName}${toolPhase ? ` (${toolPhase})` : ""}`;
+  if (toolName) {
+    // Show file path for read/write tools to make traces more informative
+    const args = evt.data.args || evt.data.input || {};
+    const filePath = args.file_path || args.filePath || args.path || args.file || "";
+    const shortPath = typeof filePath === "string" && filePath
+      ? filePath.split("/").slice(-2).join("/")
+      : "";
+    const detail = shortPath || (toolPhase ? `(${toolPhase})` : "");
+    return `${toolName}${detail ? ` ${detail}` : ""}${toolPhase && shortPath ? ` (${toolPhase})` : ""}`;
+  }
   if (delta != null)
     return `"${delta.slice(0, 50)}${delta.length > 50 ? "…" : ""}"${tokens && tokens > 1 ? ` (${tokens} tokens)` : ""}`;
 
