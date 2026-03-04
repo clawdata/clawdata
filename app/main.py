@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.database import init_db
-from app.routers import agents, approvals, behaviour, chat, lifecycle, secrets, skills, templates
+from app.routers import agents, approvals, behaviour, chat, lifecycle, secrets, secrets_manager, skills, templates
 from app.services import openclaw_lifecycle
 
 from app.services.openclaw_lifecycle import GatewayState
@@ -81,6 +81,17 @@ async def _post_start_bootstrap():
                 await openclaw_lifecycle.set_default_model("openai/gpt-4.1-mini")
         except Exception as exc:
             logger.warning("Failed to set default model: %s", exc)
+
+        # Activate secrets manager (resolve all SecretRefs into in-memory snapshot)
+        try:
+            from app.services.secrets_manager import activate_secrets
+            result = await activate_secrets()
+            logger.info(
+                "Secrets activation: %s (resolved=%d, unresolved=%d)",
+                result.state.value, result.resolved_count, result.unresolved_count,
+            )
+        except Exception as exc:
+            logger.warning("Secrets activation failed (non-fatal): %s", exc)
 
         logger.info("Post-start bootstrap complete")
     except Exception as exc:
@@ -257,6 +268,7 @@ app.include_router(templates.router, prefix="/api/templates", tags=["templates"]
 app.include_router(behaviour.router, prefix="/api/behaviour", tags=["behaviour"])
 app.include_router(approvals.router, prefix="/api/approvals", tags=["approvals"])
 app.include_router(secrets.router, prefix="/api/secrets", tags=["secrets"])
+app.include_router(secrets_manager.router, prefix="/api/secrets-manager", tags=["secrets-manager"])
 app.include_router(chat.router, prefix="/api/chat", tags=["chat"])
 
 

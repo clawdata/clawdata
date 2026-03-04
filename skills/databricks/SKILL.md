@@ -1,26 +1,25 @@
 ---
 name: databricks
 description: "Work with Databricks -- run SQL via curl, manage clusters, warehouses, Unity Catalog, jobs, and pipelines."
-metadata: {"openclaw": {"emoji": "🧱", "requires": {"bins": ["databricks"]}, "tags": ["databricks", "spark", "sql", "cloud", "data", "lakehouse", "delta", "unity-catalog"]}}
+metadata: {"openclaw": {"emoji": "🧱", "requires": {"bins": ["databricks"]}, "tags": ["databricks", "spark", "sql", "cloud", "data", "lakehouse", "delta", "unity-catalog"], "secrets": [{"env_var": "DATABRICKS_HOST", "label": "Databricks Host URL", "placeholder": "https://adb-xxxx.azuredatabricks.net"}, {"env_var": "DATABRICKS_TOKEN", "label": "Databricks Access Token", "placeholder": "dapi..."}, {"env_var": "DATABRICKS_WAREHOUSE_ID", "label": "SQL Warehouse ID", "placeholder": "abc123def456"}]}}
 ---
 
 # Databricks Skill
 
 ## RULES -- You MUST follow these
 
-1. Run `source ~/.zshrc` as the FIRST line in EVERY shell command
-2. Environment variables `DATABRICKS_HOST`, `DATABRICKS_TOKEN`, `DATABRICKS_WAREHOUSE_ID` are set in `~/.zshrc` -- use them directly
-3. NEVER ask the user for credentials, host, token, or warehouse ID
-4. NEVER use placeholders like `<your-token>` -- always use `${DATABRICKS_HOST}` etc.
-5. To run SQL: use `curl` with the SQL Statement API (pattern below). Do NOT use `databricks sql` -- it does not work.
-6. Execute commands immediately. Do not ask "would you like me to run this?"
-7. If the user says "create a table" or "run SQL" -- build the curl command and run it right away
-8. If the user does not specify a schema, use `default`
+1. Environment variables `DATABRICKS_HOST`, `DATABRICKS_TOKEN`, `DATABRICKS_WAREHOUSE_ID` are available via the secrets manager -- use them directly
+2. NEVER ask the user for credentials, host, token, or warehouse ID
+3. NEVER use placeholders like `<your-token>` -- always use `${DATABRICKS_HOST}` etc.
+4. To run SQL: use `curl` with the SQL Statement API (pattern below). Do NOT use `databricks sql` -- it does not work.
+5. Execute commands immediately. Do not ask "would you like me to run this?"
+6. If the user says "create a table" or "run SQL" -- build the curl command and run it right away
+7. If the user does not specify a schema, use `default`
+8. If credentials are missing, tell the user to configure them via the secrets manager or ask you to "setup databricks credentials"
 
 ## How to Run SQL -- Use This Exact Pattern
 
 ```bash
-source ~/.zshrc
 curl -s -X POST "${DATABRICKS_HOST}/api/2.0/sql/statements" \
   -H "Authorization: Bearer ${DATABRICKS_TOKEN}" \
   -H "Content-Type: application/json" \
@@ -38,7 +37,6 @@ Replace `YOUR_SQL_HERE` with the actual SQL. Always pipe through `jq`.
 
 Step 1 -- create table:
 ```bash
-source ~/.zshrc
 curl -s -X POST "${DATABRICKS_HOST}/api/2.0/sql/statements" \
   -H "Authorization: Bearer ${DATABRICKS_TOKEN}" \
   -H "Content-Type: application/json" \
@@ -47,7 +45,6 @@ curl -s -X POST "${DATABRICKS_HOST}/api/2.0/sql/statements" \
 
 Step 2 -- insert data:
 ```bash
-source ~/.zshrc
 curl -s -X POST "${DATABRICKS_HOST}/api/2.0/sql/statements" \
   -H "Authorization: Bearer ${DATABRICKS_TOKEN}" \
   -H "Content-Type: application/json" \
@@ -56,7 +53,6 @@ curl -s -X POST "${DATABRICKS_HOST}/api/2.0/sql/statements" \
 
 Step 3 -- verify:
 ```bash
-source ~/.zshrc
 curl -s -X POST "${DATABRICKS_HOST}/api/2.0/sql/statements" \
   -H "Authorization: Bearer ${DATABRICKS_TOKEN}" \
   -H "Content-Type: application/json" \
@@ -73,7 +69,6 @@ curl -s -X POST "${DATABRICKS_HOST}/api/2.0/sql/statements" \
 ## Verify Environment
 
 ```bash
-source ~/.zshrc
 echo "HOST=${DATABRICKS_HOST} WAREHOUSE=${DATABRICKS_WAREHOUSE_ID} TOKEN=$([ -n \"${DATABRICKS_TOKEN}\" ] && echo set || echo MISSING)"
 ```
 
@@ -90,7 +85,7 @@ echo "HOST=${DATABRICKS_HOST} WAREHOUSE=${DATABRICKS_WAREHOUSE_ID} TOKEN=$([ -n 
 
 ## Best Practices
 
-- Always `source ~/.zshrc` first -- never skip this
+- Credentials are injected via the secrets manager -- never hardcode or source from .zshrc
 - Use curl + SQL Statement API for all SQL (not `databricks sql`)
 - Use Delta format, default schema, jq for output
 - Check warehouse state: `databricks sql warehouses get $DATABRICKS_WAREHOUSE_ID --output JSON | jq -r '.state'`

@@ -218,6 +218,7 @@ export function GlobalChatSlideOver() {
                   message={msg}
                   agent={currentAgent}
                   agents={agents}
+                  onResolveSecretsAccess={chat.resolveSecretsAccess}
                 />
               ))}
               {chat.thinking &&

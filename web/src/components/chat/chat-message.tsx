@@ -15,6 +15,9 @@ import { AgentEmoji } from "@/components/agent-emoji";
 import type { ChatMessage, AgentInfo } from "./types";
 import { MarkdownContent } from "./markdown-content";
 import { ToolActivityCard } from "./tool-activity-card";
+import { SecretsAccessCard } from "./secrets-access-card";
+import { SecretsStoreCard } from "./secrets-store-card";
+import { SkillSetupCard } from "./skill-setup-card";
 
 interface ChatMessageBubbleProps {
   message: ChatMessage;
@@ -22,6 +25,12 @@ interface ChatMessageBubbleProps {
   agent?: AgentInfo;
   /** Full list of agents (for resolving delegation targets) */
   agents?: AgentInfo[];
+  /** Callback when user resolves a secrets access request */
+  onResolveSecretsAccess?: (requestId: string, approved: boolean) => void;
+  /** Callback when user confirms storing a credential */
+  onStoreSecret?: (field: string, envVar: string, value: string, label: string) => void;
+  /** Callback when user rejects storing a credential */
+  onRejectSecret?: (field: string) => void;
 }
 
 const roleIcon = {
@@ -34,12 +43,46 @@ export function ChatMessageBubble({
   message: msg,
   agent,
   agents,
+  onResolveSecretsAccess,
+  onStoreSecret,
+  onRejectSecret,
 }: ChatMessageBubbleProps) {
   const showCopy = msg.role === "user" || msg.role === "assistant";
 
   // Tool activity messages render as cards, not bubbles
   if (msg.role === "tool_activity" && msg.toolActivity) {
     return <ToolActivityCard activity={msg.toolActivity} />;
+  }
+
+  // Secrets access messages render as approval cards
+  if (msg.role === "secrets_access" && msg.secretsAccess) {
+    return (
+      <SecretsAccessCard
+        data={msg.secretsAccess}
+        onResolve={onResolveSecretsAccess ?? (() => {})}
+      />
+    );
+  }
+
+  // Secrets store offers render as confirmation cards
+  if (msg.role === "secrets_store" && msg.secretsStore) {
+    return (
+      <SecretsStoreCard
+        data={msg.secretsStore}
+        onStore={onStoreSecret ?? (() => {})}
+        onReject={onRejectSecret ?? (() => {})}
+      />
+    );
+  }
+
+  // Skill setup form cards
+  if (msg.role === "skill_setup" && msg.skillSetup) {
+    return (
+      <SkillSetupCard
+        data={msg.skillSetup}
+        onStore={onStoreSecret ?? (() => {})}
+      />
+    );
   }
 
   return (

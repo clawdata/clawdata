@@ -23,6 +23,7 @@ import {
   Stethoscope,
   SlidersHorizontal,
   DollarSign,
+  Shield,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -50,6 +51,7 @@ const nav = [
   { href: "/skills", label: "Skills", icon: Puzzle },
   { href: "/templates", label: "Templates", icon: FileCode2 },
   { href: "/costing", label: "Costing", icon: DollarSign },
+  { href: "/secrets", label: "Secrets", icon: Shield },
   { href: "/openclaw", label: "OpenClaw", icon: Settings },
   { href: "/settings", label: "Settings", icon: SlidersHorizontal },
 ];

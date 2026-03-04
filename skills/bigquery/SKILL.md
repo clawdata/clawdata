@@ -1,7 +1,7 @@
 ---
 name: bigquery
 description: "Query and manage Google BigQuery datasets -- run SQL, list tables, inspect schemas, load data, and manage partitioning."
-metadata: {"openclaw": {"emoji": "🔍", "requires": {"bins": ["bq"]}, "tags": ["database", "bigquery", "sql", "google", "cloud", "data"]}}
+metadata: {"openclaw": {"emoji": "🔍", "requires": {"bins": ["bq"]}, "tags": ["database", "bigquery", "sql", "google", "cloud", "data"], "secrets": [{"env_var": "GOOGLE_APPLICATION_CREDENTIALS", "label": "GCP Service Account Key Path", "placeholder": "/path/to/service-account.json", "optional": true}, {"env_var": "GOOGLE_CLOUD_PROJECT", "label": "GCP Project ID", "placeholder": "my-project-id"}]}}
 ---
 
 # BigQuery

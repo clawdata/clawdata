@@ -732,3 +732,224 @@ export function chatWsUrl(agentId: string): string {
   const base = API_BASE.replace(/^http/, "ws");
   return `${base}/api/chat/${agentId}`;
 }
+
+// ── Secrets Manager types ───────────────────────────────────────────
+
+export type SecretSource = "env" | "file" | "exec";
+
+export interface SecretRef {
+  source: SecretSource;
+  provider: string;
+  id: string;
+}
+
+export interface SecretProviderConfig {
+  source: SecretSource;
+  // env-specific
+  allowlist?: string[];
+  // file-specific
+  path?: string;
+  mode?: "json" | "singleValue";
+  allowInsecurePath?: boolean;
+  // exec-specific
+  command?: string;
+  args?: string[];
+  passEnv?: string[];
+  jsonOnly?: boolean;
+  allowSymlinkCommand?: boolean;
+  trustedDirs?: string[];
+  timeoutMs?: number;
+}
+
+export interface SecretProvider {
+  name: string;
+  source: SecretSource;
+  config: SecretProviderConfig;
+}
+
+export interface ProviderDefaults {
+  env: string;
+  file: string | null;
+  exec: string | null;
+}
+
+export interface ProvidersListResponse {
+  providers: SecretProvider[];
+  defaults: ProviderDefaults;
+}
+
+export interface SecretRefResponse {
+  field: string;
+  ref: SecretRef;
+  agent_id: string | null;
+  resolved: boolean;
+  active: boolean;
+  error: string | null;
+}
+
+export interface SecretRefListResponse {
+  refs: SecretRefResponse[];
+}
+
+export type SnapshotState =
+  | "uninitialized"
+  | "healthy"
+  | "degraded"
+  | "failed";
+
+export interface SecretsSnapshotStatus {
+  state: SnapshotState;
+  resolved_count: number;
+  unresolved_count: number;
+  last_activated_at: string | null;
+  last_error: string | null;
+  degraded_since: string | null;
+}
+
+export interface ReloadResponse {
+  success: boolean;
+  state: SnapshotState;
+  resolved_count: number;
+  unresolved_count: number;
+  errors: Record<string, string>;
+  message: string;
+}
+
+export type AuditSeverity = "info" | "warning" | "error";
+
+export interface AuditFinding {
+  code: string;
+  severity: AuditSeverity;
+  message: string;
+  field: string | null;
+  file: string | null;
+}
+
+export interface AuditResponse {
+  clean: boolean;
+  findings: AuditFinding[];
+  summary: string;
+}
+
+// ── Provider presets ─────────────────────────────────────────────────
+
+export interface ProviderPresetField {
+  key: string;
+  label: string;
+  placeholder: string;
+  required: boolean;
+  secret: boolean;
+  help: string;
+}
+
+export interface ProviderPreset {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  source: SecretSource;
+  category: string;
+  default_provider_name: string;
+  config_template: Record<string, unknown>;
+  fields: ProviderPresetField[];
+  docs_url: string;
+  example_ref: SecretRef | null;
+}
+
+export interface ProviderPresetsResponse {
+  presets: ProviderPreset[];
+}
+
+// ── Credential surface ──────────────────────────────────────────────
+
+export type CredentialFieldStatus = "ref" | "env" | "plaintext" | "unconfigured";
+
+export interface CredentialField {
+  field: string;
+  label: string;
+  provider_id: string | null;
+  status: CredentialFieldStatus;
+  ref: SecretRef | null;
+  env_var_hint: string | null;
+  resolved: boolean;
+}
+
+export interface CredentialSurfaceResponse {
+  fields: CredentialField[];
+  total: number;
+  configured: number;
+  unconfigured: number;
+}
+
+// ── Secrets Manager API ─────────────────────────────────────────────
+
+export const secretsManagerApi = {
+  // Snapshot status
+  status: () => api<SecretsSnapshotStatus>("/api/secrets-manager/status"),
+
+  // Credential surface
+  credentialSurface: () =>
+    api<CredentialSurfaceResponse>("/api/secrets-manager/credential-surface"),
+  clearAll: () =>
+    api<{ cleared_refs: number; cleared_plaintext: number; cleared_env_vars: number; total_cleared: number }>(
+      "/api/secrets-manager/clear-all",
+      { method: "DELETE" }
+    ),
+  setupRef: (field: string, envVar: string, value?: string) =>
+    api<SecretRefResponse>("/api/secrets-manager/setup-ref", {
+      method: "POST",
+      body: JSON.stringify({ field, env_var: envVar, value: value || null }),
+    }),
+
+  // Provider presets
+  listPresets: () =>
+    api<ProviderPresetsResponse>("/api/secrets-manager/presets"),
+  createFromPreset: (
+    presetId: string,
+    providerName: string,
+    fieldValues: Record<string, string>
+  ) =>
+    api<SecretProvider>("/api/secrets-manager/presets/create", {
+      method: "POST",
+      body: JSON.stringify({
+        preset_id: presetId,
+        provider_name: providerName,
+        field_values: fieldValues,
+      }),
+    }),
+
+  // Providers
+  listProviders: () =>
+    api<ProvidersListResponse>("/api/secrets-manager/providers"),
+  createProvider: (name: string, config: SecretProviderConfig) =>
+    api<SecretProvider>("/api/secrets-manager/providers", {
+      method: "POST",
+      body: JSON.stringify({ name, config }),
+    }),
+  updateProvider: (name: string, config: SecretProviderConfig) =>
+    api<SecretProvider>(`/api/secrets-manager/providers/${name}`, {
+      method: "PUT",
+      body: JSON.stringify({ config }),
+    }),
+  deleteProvider: (name: string) =>
+    api<void>(`/api/secrets-manager/providers/${name}`, { method: "DELETE" }),
+
+  // SecretRefs
+  listRefs: () => api<SecretRefListResponse>("/api/secrets-manager/refs"),
+  setRef: (field: string, ref: SecretRef, agentId?: string) =>
+    api<SecretRefResponse>("/api/secrets-manager/refs", {
+      method: "POST",
+      body: JSON.stringify({ field, ref, agent_id: agentId }),
+    }),
+  removeRef: (field: string) =>
+    api<void>(`/api/secrets-manager/refs/${field}`, { method: "DELETE" }),
+
+  // Resolution & reload
+  reload: () =>
+    api<ReloadResponse>("/api/secrets-manager/reload", { method: "POST" }),
+  activate: () =>
+    api<ReloadResponse>("/api/secrets-manager/activate", { method: "POST" }),
+
+  // Audit
+  audit: () => api<AuditResponse>("/api/secrets-manager/audit"),
+};

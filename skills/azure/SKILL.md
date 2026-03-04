@@ -2,7 +2,7 @@
 ---
 name: azure
 description: "Manage Azure cloud resources -- resource groups, storage, databases, functions, and data services using the az CLI."
-metadata: {"openclaw": {"emoji": "☁️", "requires": {"bins": ["az"]}, "tags": ["cloud", "azure", "storage", "database", "data", "microsoft"]}}
+metadata: {"openclaw": {"emoji": "☁️", "requires": {"bins": ["az"]}, "tags": ["cloud", "azure", "storage", "database", "data", "microsoft"], "secrets": [{"env_var": "AZURE_SUBSCRIPTION_ID", "label": "Azure Subscription ID", "placeholder": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"}, {"env_var": "AZURE_TENANT_ID", "label": "Azure Tenant ID", "placeholder": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"}, {"env_var": "AZURE_CLIENT_ID", "label": "Azure Client ID (Service Principal)", "placeholder": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx", "optional": true}, {"env_var": "AZURE_CLIENT_SECRET", "label": "Azure Client Secret", "placeholder": "secret value", "optional": true}]}}
 ---
 
 # Azure

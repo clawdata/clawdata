@@ -1,7 +1,7 @@
 ---
 name: snowflake
 description: "Query and manage Snowflake data warehouses -- run SQL, manage warehouses, inspect schemas, and control access."
-metadata: {"openclaw": {"emoji": "❄️", "requires": {"bins": ["snow"]}, "tags": ["database", "snowflake", "sql", "cloud", "data", "warehouse"]}}
+metadata: {"openclaw": {"emoji": "❄️", "requires": {"bins": ["snow"]}, "tags": ["database", "snowflake", "sql", "cloud", "data", "warehouse"], "secrets": [{"env_var": "SNOWFLAKE_ACCOUNT", "label": "Snowflake Account", "placeholder": "org-account"}, {"env_var": "SNOWFLAKE_USER", "label": "Snowflake User", "placeholder": "username"}, {"env_var": "SNOWFLAKE_PASSWORD", "label": "Snowflake Password", "placeholder": "password"}, {"env_var": "SNOWFLAKE_WAREHOUSE", "label": "Snowflake Warehouse", "placeholder": "COMPUTE_WH", "optional": true}, {"env_var": "SNOWFLAKE_DATABASE", "label": "Snowflake Database", "placeholder": "MY_DB", "optional": true}, {"env_var": "SNOWFLAKE_SCHEMA", "label": "Snowflake Schema", "placeholder": "PUBLIC", "optional": true}]}}
 ---
 
 # Snowflake

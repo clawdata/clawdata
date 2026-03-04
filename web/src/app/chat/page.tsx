@@ -13,7 +13,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Send,
   Loader2,
@@ -24,7 +23,6 @@ import {
   Activity,
   ArrowDown,
   History,
-  AlertTriangle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AgentEmoji } from "@/components/agent-emoji";
@@ -56,8 +54,6 @@ export default function ChatPage() {
   const agents = agentsData?.agents;
   const [agentId, setAgentId] = useState("");
   const [wizardOpen, setWizardOpen] = useState(false);
-
-  const needsSetup = onboarding && !onboarding.onboarded;
 
   const currentAgent: AgentInfo | undefined = agents?.find(
     (a) => a.id === agentId,
@@ -118,28 +114,6 @@ export default function ChatPage() {
         onOpenChange={setWizardOpen}
         initialStep={!onboarding?.any_api_key_configured ? 2 : undefined}
       />
-
-      {/* Setup warning */}
-      {needsSetup && (
-        <Alert variant="destructive" className="mb-3">
-          <AlertTriangle className="h-4 w-4" />
-          <AlertDescription className="flex items-center justify-between">
-            <span>
-              {!onboarding.any_api_key_configured
-                ? "No API keys configured. Add at least one LLM provider key to start chatting."
-                : "OpenClaw setup is incomplete. Complete the setup wizard to use chat."}
-            </span>
-            <Button
-              size="sm"
-              variant="outline"
-              className="ml-3 shrink-0"
-              onClick={() => setWizardOpen(true)}
-            >
-              Open Setup
-            </Button>
-          </AlertDescription>
-        </Alert>
-      )}
 
       {/* Header */}
       <div className="flex flex-wrap items-center gap-2 pb-4 sm:gap-3">
@@ -289,6 +263,9 @@ export default function ChatPage() {
                         message={msg}
                         agent={currentAgent}
                         agents={agents}
+                        onResolveSecretsAccess={chat.resolveSecretsAccess}
+                        onStoreSecret={chat.storeSecret}
+                        onRejectSecret={chat.rejectSecret}
                       />,
                     );
                   });

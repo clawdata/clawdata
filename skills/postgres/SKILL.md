@@ -1,7 +1,7 @@
 ---
 name: postgres
 description: "Query and manage PostgreSQL databases -- run SQL, inspect schemas, manage tables, and perform database administration."
-metadata: {"openclaw": {"emoji": "🐘", "requires": {"bins": ["psql"]}, "tags": ["database", "postgres", "sql", "query", "data"]}}
+metadata: {"openclaw": {"emoji": "🐘", "requires": {"bins": ["psql"]}, "tags": ["database", "postgres", "sql", "query", "data"], "secrets": [{"env_var": "PGHOST", "label": "PostgreSQL Host", "placeholder": "localhost"}, {"env_var": "PGPORT", "label": "PostgreSQL Port", "placeholder": "5432", "optional": true}, {"env_var": "PGUSER", "label": "PostgreSQL User", "placeholder": "postgres"}, {"env_var": "PGPASSWORD", "label": "PostgreSQL Password", "placeholder": "password"}, {"env_var": "PGDATABASE", "label": "PostgreSQL Database", "placeholder": "mydb", "optional": true}]}}
 ---
 
 # PostgreSQL

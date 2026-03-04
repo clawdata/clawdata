@@ -54,6 +54,69 @@ _MEMORY_CONTEXT_HEADER = (
 )
 _MEMORY_CONTEXT_FOOTER = "[END WORKSPACE SNAPSHOT]"
 
+# System instruction for secrets storage capability
+_SECRETS_STORE_INSTRUCTION_HEADER = (
+    "[SYSTEM -- CREDENTIAL STORAGE CAPABILITY]\n"
+    "You can store credentials in the secrets manager. When you discover "
+    "credentials (API keys, tokens, passwords) via exec or any tool, and "
+    "the user asks you to store/save them in secrets, output a JSON block "
+    "in this EXACT format on its own line:\n"
+    "```store_secret\n"
+    '{"field": "<dotted.config.path>", "env_var": "<ENV_VAR_NAME>", '
+    '"value": "<the_actual_secret_value>", "label": "<Human Label>"}\n'
+    "```\n"
+    "You may output multiple store_secret blocks if storing multiple credentials.\n"
+    "The system will intercept these blocks, prompt the user for confirmation, "
+    "and store them securely. NEVER show the full secret value in plain text "
+    "outside the store_secret block.\n"
+    "For any credential not listed below, use a descriptive field like "
+    '"integrations.<name>.token" and an appropriate ENV_VAR_NAME.\n'
+    "\n"
+    "You can also prompt the user to configure credentials for a skill by "
+    "outputting a setup_skill block. This renders a secure input form in "
+    "chat -- the user fills in values directly and the LLM NEVER sees them.\n"
+    "```setup_skill\n"
+    '{"skill": "<skill_name>"}\n'
+    "```\n"
+    "Use this when the user says 'setup <skill> credentials', "
+    "'configure <skill> auth', or similar. The system will look up "
+    "what credentials the skill needs and show the appropriate form.\n"
+)
+
+
+async def _build_secrets_store_instruction() -> str:
+    """Build a dynamic system instruction with current credential status."""
+    from app.services.secrets_manager import get_credential_surface
+
+    try:
+        surface = await get_credential_surface()
+    except Exception:
+        # Fallback: return header only if surface fetch fails
+        return _SECRETS_STORE_INSTRUCTION_HEADER + "[END CREDENTIAL STORAGE CAPABILITY]"
+
+    lines = ["Known credential fields (current status):"]
+    for f in surface.fields:
+        status_label = f.status.value  # ref / env / plaintext / unconfigured
+        if f.status.value == "ref" and f.resolved:
+            status_label = "configured"
+        elif f.status.value == "ref" and not f.resolved:
+            status_label = "ref (missing value)"
+        elif f.status.value == "plaintext":
+            status_label = "configured"
+        elif f.status.value == "env":
+            status_label = "configured (env)"
+        # else unconfigured
+
+        lines.append(
+            f"- {f.field} -> {f.env_var_hint} [{status_label}] ({f.label})"
+        )
+
+    return (
+        _SECRETS_STORE_INSTRUCTION_HEADER
+        + "\n".join(lines)
+        + "\n[END CREDENTIAL STORAGE CAPABILITY]"
+    )
+
 # Max bytes of memory context to inject (prevent bloating the message)
 _MAX_MEMORY_CONTEXT = 4000
 
@@ -270,6 +333,190 @@ def _text_hints_delegation(text: str) -> bool:
     return any(hint in lower for hint in _DELEGATION_TEXT_HINTS)
 
 
+# ── SecretRef-aware tool detection ───────────────────────────────────
+
+# Credential surface keywords that indicate a tool is touching secrets
+_SECRET_SURFACE_KEYWORDS = {
+    "apikey", "api_key", "password", "token", "secret",
+    "credential", "auth", "bottoken", "signing_secret",
+}
+
+
+def _tool_touches_secrets(tool_name: str, args: dict[str, Any]) -> str | None:
+    """Return the credential field if a tool invocation touches a secret surface.
+
+    Returns None if the tool doesn't appear to access secrets.
+    """
+    name_lower = str(tool_name).lower()
+
+    # Explicit secrets-related tools
+    if "secret" in name_lower or "credential" in name_lower:
+        field = args.get("field") or args.get("path") or args.get("key") or ""
+        return str(field) if field else tool_name
+
+    # Check args for secret-bearing field names
+    for k, v in args.items():
+        k_lower = k.lower()
+        if any(kw in k_lower for kw in _SECRET_SURFACE_KEYWORDS):
+            return str(v) if v else k
+        if isinstance(v, str) and any(kw in v.lower() for kw in _SECRET_SURFACE_KEYWORDS):
+            return v
+
+    return None
+
+
+# ── Store-secret block extraction ────────────────────────────────────
+
+import re as _re
+
+_STORE_SECRET_PATTERN = _re.compile(
+    r"```store_secret\s*\n\s*(\{.*?\})\s*\n\s*```",
+    _re.DOTALL,
+)
+
+_SETUP_SKILL_PATTERN = _re.compile(
+    r"```setup_skill\s*\n\s*(\{.*?\})\s*\n\s*```",
+    _re.DOTALL,
+)
+
+
+def _extract_store_secret_offers(text: str) -> list[dict[str, str]]:
+    """Extract store_secret JSON blocks from assistant text.
+
+    Looks for:
+        ```store_secret
+        {"field": "...", "env_var": "...", "value": "...", "label": "..."}
+        ```
+    Returns a list of parsed dicts (may be empty).
+    """
+    offers: list[dict[str, str]] = []
+    for match in _STORE_SECRET_PATTERN.finditer(text):
+        try:
+            import json as _json
+            parsed = _json.loads(match.group(1))
+            if isinstance(parsed, dict) and parsed.get("env_var"):
+                offers.append(parsed)
+        except (ValueError, KeyError):
+            logger.debug("Malformed store_secret block: %s", match.group(1)[:200])
+    return offers
+
+
+def _extract_setup_skill_requests(text: str) -> list[str]:
+    """Extract setup_skill blocks from assistant text.
+
+    Looks for:
+        ```setup_skill
+        {"skill": "databricks"}
+        ```
+    Returns a list of skill names.
+    """
+    skills: list[str] = []
+    for match in _SETUP_SKILL_PATTERN.finditer(text):
+        try:
+            import json as _json
+            parsed = _json.loads(match.group(1))
+            if isinstance(parsed, dict) and parsed.get("skill"):
+                skills.append(parsed["skill"])
+        except (ValueError, KeyError):
+            logger.debug("Malformed setup_skill block: %s", match.group(1)[:200])
+    return skills
+
+
+def _get_skill_secrets(skill_name: str) -> list[dict[str, Any]] | None:
+    """Read a skill's SKILL.md frontmatter and return its secrets metadata.
+
+    Returns a list of dicts like:
+        [{"env_var": "DATABRICKS_HOST", "label": "...", "placeholder": "...", "optional": false}]
+    Or None if the skill has no secrets defined.
+    """
+    import json as _json
+    import yaml as _yaml
+
+    # Search in main skills dir and any sub-agent skills dirs
+    candidates = [settings.skills_dir / skill_name / "SKILL.md"]
+    # Also check userdata sub-agent skill dirs
+    userdata_agents = settings.userdata_dir / "agents"
+    if userdata_agents.exists():
+        for agent_dir in userdata_agents.iterdir():
+            sub_skill = agent_dir / "skills" / skill_name / "SKILL.md"
+            if sub_skill.exists():
+                candidates.append(sub_skill)
+
+    for skill_path in candidates:
+        if not skill_path.exists():
+            continue
+        content = skill_path.read_text()
+
+        # Parse YAML frontmatter between --- markers
+        if not content.startswith("---"):
+            continue
+        end = content.find("---", 3)
+        if end < 0:
+            continue
+        frontmatter_str = content[3:end].strip()
+
+        try:
+            frontmatter = _yaml.safe_load(frontmatter_str)
+        except Exception:
+            # Fallback: frontmatter might have JSON in metadata field
+            frontmatter = None
+
+        if not isinstance(frontmatter, dict):
+            continue
+
+        metadata = frontmatter.get("metadata", {})
+        if isinstance(metadata, str):
+            try:
+                metadata = _json.loads(metadata)
+            except Exception:
+                continue
+
+        openclaw_meta = metadata.get("openclaw", {})
+        secrets = openclaw_meta.get("secrets")
+        if secrets and isinstance(secrets, list):
+            # Normalise each entry
+            result = []
+            for s in secrets:
+                if isinstance(s, dict) and s.get("env_var"):
+                    result.append({
+                        "env_var": s["env_var"],
+                        "label": s.get("label", s["env_var"]),
+                        "placeholder": s.get("placeholder", ""),
+                        "optional": s.get("optional", False),
+                    })
+            return result if result else None
+
+    return None
+
+
+async def _get_skill_secrets_with_status(
+    skill_name: str,
+) -> list[dict[str, Any]] | None:
+    """Get skill secrets metadata enriched with current configuration status."""
+    secrets = _get_skill_secrets(skill_name)
+    if not secrets:
+        return None
+
+    # Check which env vars are already set
+    from app.services.secrets_manager import _read_dot_env, _read_config, _find_secret_refs
+
+    try:
+        dot_env = _read_dot_env()
+        cfg = _read_config()
+        ref_map = {ref.id: field for field, ref in _find_secret_refs(cfg)}
+    except Exception:
+        dot_env = {}
+        ref_map = {}
+
+    for s in secrets:
+        env_var = s["env_var"]
+        # Check if already configured
+        configured = env_var in dot_env or env_var in ref_map
+        s["configured"] = configured
+
+    return secrets
+
+
 def _process_stream_event(
     payload: dict[str, Any], run_id: str, agent_id: str
 ) -> tuple[dict[str, Any] | None, bool, bool]:
@@ -397,7 +644,14 @@ async def send_and_stream(
     # ── Inject memory context so agent recalls past sessions ────────
     memory_ctx = _sanitise_unicode(_load_memory_context(agent_id))
     message = _sanitise_unicode(message)
-    outgoing = f"{memory_ctx}{message}" if memory_ctx else message
+    # Build context: memory + secrets capability instruction (with live status)
+    secrets_instruction = await _build_secrets_store_instruction()
+    ctx_parts = []
+    if memory_ctx:
+        ctx_parts.append(memory_ctx)
+    ctx_parts.append(secrets_instruction)
+    context_block = "\n\n".join(ctx_parts) + "\n\n"
+    outgoing = f"{context_block}{message}"
 
     # ── Pre-send context traces ─────────────────────────────────────
     t_start = time.monotonic()
@@ -644,6 +898,57 @@ async def send_and_stream(
                 logger.info("sessions_spawn detected in run %s (tool event), target=%s", run_id, delegation_target)
             if ev:
                 yield ev
+
+                # ── Secrets access detection ─────────────────────────
+                # When a tool_start touches a secret-bearing surface,
+                # emit a secrets_access event so the UI can show an
+                # approval card to the user.
+                if ev.get("type") == "tool_start":
+                    tool_name = ev.get("content", "").split(":")[0].strip()
+                    tool_args = (ev.get("metadata") or {}).get("args", {})
+                    secret_field = _tool_touches_secrets(tool_name, tool_args)
+                    if secret_field:
+                        import uuid as _uuid
+                        req_id = f"sa-{_uuid.uuid4().hex[:12]}"
+                        from app.schemas.secrets_manager import SecretRef, SecretSource
+                        from app.services import secrets_manager as _sm
+                        try:
+                            ref = SecretRef(
+                                source=SecretSource.ENV,
+                                provider="default",
+                                id=secret_field.upper().replace(".", "_")
+                                  if not secret_field.startswith("/")
+                                  else secret_field,
+                            )
+                        except Exception:
+                            # If we can't construct a valid SecretRef, use a generic one
+                            ref = SecretRef(
+                                source=SecretSource.ENV,
+                                provider="default",
+                                id="SECRET_VALUE",
+                            )
+                        await _sm.create_access_request(
+                            request_id=req_id,
+                            agent_id=agent_id,
+                            ref=ref,
+                            field=secret_field,
+                            reason=f"Tool '{tool_name}' needs access to a credential",
+                            session_key=session_key if isinstance(session_key, str) else None,
+                        )
+                        yield {
+                            "type": "secrets_access",
+                            "request_id": req_id,
+                            "agent_id": agent_id,
+                            "field": secret_field,
+                            "ref": {
+                                "source": ref.source,
+                                "provider": ref.provider,
+                                "id": ref.id,
+                            },
+                            "reason": f"Tool '{tool_name}' needs access to a credential",
+                            "run_id": run_id,
+                        }
+
                 # If lifecycle errored, also yield an explicit error event for the UI
                 if is_end and stream == "lifecycle" and data.get("phase") == "error":
                     error_msg = data.get("error") or data.get("message") or "Agent run failed"
@@ -702,6 +1007,30 @@ async def send_and_stream(
                 "saw_delegation": saw_spawn,
             },
         }
+
+        # ── Detect store_secret blocks in assistant text ─────────────
+        for offer in _extract_store_secret_offers(assistant_text):
+            yield {
+                "type": "secrets_store_offer",
+                "field": offer.get("field", ""),
+                "env_var": offer.get("env_var", ""),
+                "value": offer.get("value", ""),
+                "label": offer.get("label", offer.get("field", "")),
+                "agent_id": agent_id,
+                "run_id": run_id,
+            }
+
+        # ── Detect setup_skill blocks in assistant text ──────────────
+        for skill_name in _extract_setup_skill_requests(assistant_text):
+            skill_secrets = await _get_skill_secrets_with_status(skill_name)
+            if skill_secrets:
+                yield {
+                    "type": "skill_setup",
+                    "skill": skill_name,
+                    "fields": skill_secrets,
+                    "agent_id": agent_id,
+                    "run_id": run_id,
+                }
 
         # ── If sub-agent already responded inline, we're done ────────
         if inline_responded:

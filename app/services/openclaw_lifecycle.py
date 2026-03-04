@@ -81,6 +81,25 @@ NODE_MIN_MAJOR = 22
 # ── Helpers ──────────────────────────────────────────────────────────
 
 
+def _load_openclaw_env() -> dict[str, str]:
+    """Read ~/.openclaw/.env and return key-value pairs."""
+    dot_env_path = Path.home() / ".openclaw" / ".env"
+    extras: dict[str, str] = {}
+    if dot_env_path.exists():
+        try:
+            for line in dot_env_path.read_text().splitlines():
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    key, _, value = line.partition("=")
+                    key = key.strip()
+                    value = value.strip().strip("'\"")
+                    if key:
+                        extras[key] = value
+        except Exception as exc:
+            logger.warning("Could not load ~/.openclaw/.env: %s", exc)
+    return extras
+
+
 async def _run(
     cmd: list[str],
     *,
@@ -89,6 +108,7 @@ async def _run(
 ) -> tuple[int, str, str]:
     """Run a subprocess and return (returncode, stdout, stderr)."""
     env = os.environ.copy()
+    env.update(_load_openclaw_env())
     if env_extra:
         env.update(env_extra)
 
@@ -460,6 +480,11 @@ async def start_gateway(req: GatewayStartRequest) -> ActionResult:
     try:
         env = os.environ.copy()
         env.update(env_extra)
+
+        # Load secrets from ~/.openclaw/.env so the gateway can resolve
+        # SecretRefs that point to env vars (e.g. OPENAI_API_KEY)
+        env.update(_load_openclaw_env())
+
         log_path.parent.mkdir(parents=True, exist_ok=True)
         # Truncate log on each start attempt
         log_path.write_text("")
@@ -1467,7 +1492,7 @@ async def get_env_keys() -> EnvListResponse:
 
 
 async def set_env_key(key: str, value: str) -> ActionResult:
-    """Set or update a key in ~/.openclaw/.env and gateway auth files."""
+    """Set or update a key in ~/.openclaw/.env, gateway auth files, and secrets manager."""
     env = _read_env_file()
     env[key] = value
     try:
@@ -1477,13 +1502,26 @@ async def set_env_key(key: str, value: str) -> ActionResult:
         provider_id = _env_var_to_provider(key)
         if provider_id and value:
             _write_agent_auth(provider_id, value)
+
+        # Also create a SecretRef in openclaw.json so the secrets manager
+        # knows about this credential (unified system).
+        try:
+            from app.services import secrets_manager
+            field = secrets_manager.env_var_to_credential_field(key)
+            if field:
+                await secrets_manager.setup_secret_ref(
+                    field=field, env_var=key, value=None  # value already in .env
+                )
+        except Exception as exc:
+            logger.debug("SecretRef auto-create for %s skipped: %s", key, exc)
+
         return ActionResult(success=True, message=f"{key} saved to {OPENCLAW_ENV_FILE}")
     except OSError as exc:
         return ActionResult(success=False, message=str(exc))
 
 
 async def delete_env_key(key: str) -> ActionResult:
-    """Remove a key from ~/.openclaw/.env and gateway auth files."""
+    """Remove a key from ~/.openclaw/.env, gateway auth files, and secrets manager."""
     env = _read_env_file()
     if key not in env:
         return ActionResult(success=False, message=f"{key} not found in .env")
@@ -1494,6 +1532,16 @@ async def delete_env_key(key: str) -> ActionResult:
         provider_id = _env_var_to_provider(key)
         if provider_id:
             _remove_agent_auth(provider_id)
+
+        # Also remove the SecretRef from openclaw.json
+        try:
+            from app.services import secrets_manager
+            field = secrets_manager.env_var_to_credential_field(key)
+            if field:
+                await secrets_manager.remove_ref(field)
+        except Exception as exc:
+            logger.debug("SecretRef auto-remove for %s skipped: %s", key, exc)
+
         return ActionResult(success=True, message=f"{key} removed")
     except OSError as exc:
         return ActionResult(success=False, message=str(exc))

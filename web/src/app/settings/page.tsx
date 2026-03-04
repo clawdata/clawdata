@@ -4,9 +4,11 @@ import { useState, useEffect } from "react";
 import useSWR from "swr";
 import {
   lifecycleApi,
+  secretsManagerApi,
   type ConfigResponse,
   type ModelsStatusResponse,
   type EnvListResponse,
+  type CredentialSurfaceResponse,
 } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -39,6 +41,11 @@ import {
   Trash2,
   Info,
   ExternalLink,
+  Shield,
+  CheckCircle2,
+  AlertTriangle,
+  XCircle,
+  ArrowRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -47,6 +54,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { PageHeader } from "@/components/page-header";
 import { ApiKeysDialog } from "@/components/openclaw/api-keys-dialog";
 import { ModelSelectorDialog } from "@/components/openclaw/model-selector-dialog";
+import Link from "next/link";
 
 export default function SettingsPage() {
   return (
@@ -61,6 +69,8 @@ export default function SettingsPage() {
       <ConnectionSection />
       <Separator />
       <ModelSection />
+      <Separator />
+      <SecretsSection />
       <Separator />
       <ApiKeysSection />
     </div>
@@ -221,6 +231,121 @@ function ModelSection() {
       </Card>
       <ModelSelectorDialog open={dialogOpen} onOpenChange={setDialogOpen} />
     </>
+  );
+}
+
+/* ── Secrets ─────────────────────────────────────────────────────── */
+
+function SecretsSection() {
+  const { data: surface, isLoading } = useSWR(
+    "settings:secrets-surface",
+    () => secretsManagerApi.credentialSurface()
+  );
+
+  const configured = surface?.configured ?? 0;
+  const total = surface?.total ?? 0;
+  const plaintextCount =
+    surface?.fields.filter((f) => f.status === "plaintext").length ?? 0;
+  const refCount =
+    surface?.fields.filter((f) => f.status === "ref").length ?? 0;
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between pb-3">
+        <div className="flex items-center gap-2">
+          <Shield className="h-4 w-4 text-muted-foreground" />
+          <CardTitle className="text-sm">Secrets & Credentials</CardTitle>
+        </div>
+        <Link href="/secrets">
+          <Button size="sm" variant="outline" className="h-7 text-xs">
+            Manage <ArrowRight className="ml-1 h-3 w-3" />
+          </Button>
+        </Link>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <div className="space-y-2">
+            <Skeleton className="h-4 w-48" />
+            <Skeleton className="h-8 w-full" />
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {/* Summary bar */}
+            <div className="flex items-center gap-3 text-xs">
+              <span className="text-muted-foreground">
+                {configured}/{total} credentials configured
+              </span>
+              {refCount > 0 && (
+                <span className="flex items-center gap-1 text-green-600 dark:text-green-400">
+                  <CheckCircle2 className="h-3 w-3" /> {refCount} SecretRef
+                </span>
+              )}
+              {plaintextCount > 0 && (
+                <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400">
+                  <AlertTriangle className="h-3 w-3" /> {plaintextCount}{" "}
+                  plaintext
+                </span>
+              )}
+            </div>
+
+            {/* Key fields */}
+            {surface && surface.fields.length > 0 && (
+              <div className="divide-y rounded-lg border">
+                {surface.fields
+                  .filter((f) => f.status !== "unconfigured")
+                  .slice(0, 5)
+                  .map((f) => (
+                    <div
+                      key={f.field}
+                      className="flex items-center gap-3 px-3 py-2 min-w-0"
+                    >
+                      {f.status === "ref" ? (
+                        <CheckCircle2 className="h-3 w-3 text-green-500 shrink-0" />
+                      ) : (
+                        <AlertTriangle className="h-3 w-3 text-amber-500 shrink-0" />
+                      )}
+                      <span className="text-xs font-medium truncate">
+                        {f.label}
+                      </span>
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          "text-[10px] ml-auto shrink-0",
+                          f.status === "ref"
+                            ? "text-green-600 border-green-200 dark:text-green-400 dark:border-green-800"
+                            : "text-amber-600 border-amber-200 dark:text-amber-400 dark:border-amber-800"
+                        )}
+                      >
+                        {f.status === "ref" ? "SecretRef" : "plaintext"}
+                      </Badge>
+                    </div>
+                  ))}
+              </div>
+            )}
+
+            {plaintextCount > 0 && (
+              <p className="text-[10px] text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                <Info className="h-3 w-3" />
+                {plaintextCount} credential(s) using plaintext — migrate to
+                SecretRefs for better security
+              </p>
+            )}
+
+            {configured === 0 && (
+              <div className="flex flex-col items-center gap-2 py-4 text-muted-foreground">
+                <Shield className="h-6 w-6 opacity-30" />
+                <p className="text-xs">No credentials configured</p>
+                <Link href="/secrets">
+                  <Button size="sm" variant="outline" className="mt-1">
+                    <Plus className="mr-1 h-3 w-3" /> Set up credentials
+                  </Button>
+                </Link>
+              </div>
+            )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

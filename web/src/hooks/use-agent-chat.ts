@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { chatWsUrl, lifecycleApi, type SessionEntry } from "@/lib/api";
-import type { ChatMessage, TraceEvent, AgentInfo, ToolActivity } from "@/components/chat/types";
+import type { ChatMessage, TraceEvent, AgentInfo, ToolActivity, SecretsAccessData, SecretsStoreData, SkillSetupData, SkillSetupField } from "@/components/chat/types";
 
 export interface UseAgentChatOptions {
   /** Auto-connect when agentId changes (default: true) */
@@ -26,6 +26,9 @@ export interface UseAgentChatReturn {
   disconnect: () => void;
   newChat: () => void;
   selectSession: (session: SessionEntry) => void;
+  resolveSecretsAccess: (requestId: string, approved: boolean) => void;
+  storeSecret: (field: string, envVar: string, value: string, label: string) => void;
+  rejectSecret: (field: string) => void;
 
   /* ── Refs ───────────────────────────────────────────────────────── */
   inputRef: React.RefObject<HTMLTextAreaElement | null>;
@@ -468,6 +471,107 @@ export function useAgentChat(
               timestamp: new Date(),
             },
           ]);
+        } else if (type === "secrets_access") {
+          // Agent requests permission to access a secret
+          const accessData: SecretsAccessData = {
+            requestId: data.request_id ?? "",
+            agentId: data.agent_id ?? agentId,
+            field: data.field ?? "",
+            ref: data.ref ?? { source: "env", provider: "default", id: "" },
+            reason: data.reason ?? "",
+            status: "pending",
+          };
+          setMessages((prev) => [
+            ...prev,
+            {
+              role: "secrets_access",
+              content: `Secret access request: ${accessData.field}`,
+              timestamp: new Date(),
+              secretsAccess: accessData,
+            },
+          ]);
+        } else if (type === "secrets_access_resolved") {
+          // Update existing secrets_access message with resolved status
+          const reqId = data.request_id ?? "";
+          const newStatus = data.status as "approved" | "denied";
+          const valueMasked = data.value_masked as string | undefined;
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.role === "secrets_access" &&
+              m.secretsAccess?.requestId === reqId
+                ? {
+                    ...m,
+                    secretsAccess: {
+                      ...m.secretsAccess!,
+                      status: newStatus,
+                      valueMasked,
+                    },
+                  }
+                : m,
+            ),
+          );
+        } else if (type === "secrets_store_offer") {
+          // Agent offers to store a credential
+          const storeData: SecretsStoreData = {
+            field: data.field ?? "",
+            envVar: data.env_var ?? "",
+            value: data.value ?? "",
+            label: data.label ?? "",
+            status: "pending",
+          };
+          setMessages((prev) => [
+            ...prev,
+            {
+              role: "secrets_store",
+              content: `Store credential: ${storeData.label}`,
+              timestamp: new Date(),
+              secretsStore: storeData,
+            },
+          ]);
+        } else if (type === "secrets_stored") {
+          // Update existing secrets_store message with stored status
+          const field = data.field ?? "";
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.role === "secrets_store" &&
+              m.secretsStore?.field === field &&
+              m.secretsStore?.status === "pending"
+                ? {
+                    ...m,
+                    secretsStore: {
+                      ...m.secretsStore!,
+                      status: "stored",
+                    },
+                  }
+                : m,
+            ),
+          );
+        } else if (type === "skill_setup") {
+          // Skill setup form — render the input card
+          const fields: SkillSetupField[] = (data.fields ?? []).map(
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (f: any) => ({
+              envVar: f.env_var ?? "",
+              label: f.label ?? f.env_var ?? "",
+              placeholder: f.placeholder ?? "",
+              optional: f.optional ?? false,
+              configured: f.configured ?? false,
+            }),
+          );
+          const setupData: SkillSetupData = {
+            skill: data.skill ?? "",
+            fields,
+            status: "pending",
+          };
+          setMessages((prev) => [
+            ...prev,
+            {
+              role: "skill_setup",
+              content: `Configure ${setupData.skill} credentials`,
+              timestamp: new Date(),
+              skillSetup: setupData,
+            },
+          ]);
         }
       } catch {
         appendAssistantDelta(event.data);
@@ -510,6 +614,58 @@ export function useAgentChat(
     wsRef.current = null;
     setConnected(false);
   }, []);
+
+  const resolveSecretsAccess = useCallback(
+    (requestId: string, approved: boolean) => {
+      if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+      wsRef.current.send(
+        JSON.stringify({
+          type: "secrets_resolve",
+          request_id: requestId,
+          approved,
+        }),
+      );
+    },
+    [],
+  );
+
+  const storeSecret = useCallback(
+    (field: string, envVar: string, value: string, label: string) => {
+      if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+      wsRef.current.send(
+        JSON.stringify({
+          type: "store_secret",
+          field,
+          env_var: envVar,
+          value,
+          label,
+        }),
+      );
+    },
+    [],
+  );
+
+  const rejectSecret = useCallback(
+    (field: string) => {
+      // Just update local state — no need to tell backend
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.role === "secrets_store" &&
+          m.secretsStore?.field === field &&
+          m.secretsStore?.status === "pending"
+            ? {
+                ...m,
+                secretsStore: {
+                  ...m.secretsStore!,
+                  status: "rejected" as const,
+                },
+              }
+            : m,
+        ),
+      );
+    },
+    [],
+  );
 
   const newChat = useCallback(() => {
     if (wsRef.current) {
@@ -663,6 +819,9 @@ export function useAgentChat(
     disconnect,
     newChat,
     selectSession,
+    resolveSecretsAccess,
+    storeSecret,
+    rejectSecret,
     inputRef,
   };
 }
