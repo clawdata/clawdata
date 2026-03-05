@@ -467,10 +467,15 @@ class OpenClawAdapter(AIBackendAdapter):
         return result.get("sessions", [])
 
     async def get_session_history(
-        self, agent_id: str, session_id: str
+        self, agent_id: str, session_key: str
     ) -> list[dict[str, Any]]:
+        """Fetch message history for a session via the gateway ``chat.history`` method.
+
+        The gateway requires the *session key* (e.g. ``agent:main:clawdata-<uuid>``)
+        rather than the bare sessionId UUID.
+        """
         result = await self._request(
-            "sessions.history", {"agentId": agent_id, "sessionId": session_id}
+            "chat.history", {"sessionKey": session_key}
         )
         return result.get("messages", [])
 

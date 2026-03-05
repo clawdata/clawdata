@@ -1975,10 +1975,67 @@ async def delete_session(key: str) -> ActionResult:
         return ActionResult(success=False, message=str(exc))
 
 
+# ── Session history helpers ──────────────────────────────────────────
+
+import re as _re
+
+# End-of-block markers the gateway injects before the real user text.
+_SYSTEM_END_MARKERS = [
+    "[END WORKSPACE SNAPSHOT]",
+    "[END CREDENTIAL STORAGE CAPABILITY]",
+]
+
+# Fenced code blocks the live chat renders as interactive components.
+_ACTION_BLOCK_RE = _re.compile(
+    r"```(?:setup_skill|store_secret)\s*\n.*?\n```",
+    _re.DOTALL,
+)
+
+
+def _strip_system_prefix(content: str) -> str:
+    """Extract the actual user text from a gateway-stored user message.
+
+    The gateway prepends system blocks (workspace snapshot, credential
+    storage info) to the user's message.  We find the last known end-marker
+    and return everything after it, which is what the user actually typed.
+    """
+    last_end = -1
+    for marker in _SYSTEM_END_MARKERS:
+        idx = content.rfind(marker)
+        if idx > last_end:
+            last_end = idx + len(marker)
+
+    if last_end > 0:
+        return content[last_end:].strip()
+
+    # If the message starts with a known system injection header but has no
+    # end-marker, treat it as entirely system content and skip it.
+    if content.lstrip().startswith("[SYSTEM"):
+        return ""
+
+    return content.strip()
+
+
+def _strip_action_blocks(content: str) -> str:
+    """Remove ``setup_skill`` / ``store_secret`` fenced code blocks.
+
+    In live chat these are intercepted and rendered as interactive cards;
+    for history we simply strip them so the remaining prose is displayed.
+    """
+    cleaned = _ACTION_BLOCK_RE.sub("", content)
+    return cleaned.strip()
+
+
 async def get_session_history(
     agent_id: str, session_id: str,
 ) -> SessionHistoryResponse:
-    """Fetch message history for a specific session."""
+    """Fetch message history for a specific session.
+
+    ``session_id`` may be either a full session *key*
+    (e.g. ``agent:main:clawdata-<uuid>``) or a bare *sessionId* UUID.
+    The gateway's ``chat.history`` method requires the session key, so when
+    a bare UUID is provided we first resolve it via ``sessions.list``.
+    """
     from app.adapters.openclaw import openclaw
 
     try:
@@ -1987,21 +2044,29 @@ async def get_session_history(
         logger.warning("Gateway not reachable for session history: %s", exc)
         return SessionHistoryResponse(session_id=session_id, agent_id=agent_id)
 
+    # Resolve session_id to a session key if it isn't one already
+    session_key = session_id if ":" in session_id else None
+
+    if not session_key:
+        # Look up the key from the sessions list
+        try:
+            raw = await openclaw.sessions_list_full(agent_id, limit=200)
+            for s in raw.get("sessions", []):
+                if s.get("sessionId") == session_id:
+                    session_key = s.get("key", "")
+                    break
+        except Exception as exc:
+            logger.warning("Failed to resolve session key from list: %s", exc)
+
+    if not session_key:
+        logger.warning("Could not resolve session key for session_id=%s", session_id)
+        return SessionHistoryResponse(session_id=session_id, agent_id=agent_id)
+
     raw_msgs: list[dict] = []
     try:
-        raw_msgs = await openclaw.get_session_history(agent_id, session_id)
+        raw_msgs = await openclaw.get_session_history(agent_id, session_key)
     except Exception as exc:
-        logger.warning("Failed to fetch session history with id %s: %s", session_id, exc)
-
-    # If no results and the identifier looks like a session key (contains ':'),
-    # the gateway may expect a different identifier format.  Try the key as-is
-    # since some gateways key history by session key rather than sessionId.
-    if not raw_msgs and ":" in session_id:
-        logger.info("Retrying session history with key format: %s", session_id)
-        try:
-            raw_msgs = await openclaw.get_session_history(agent_id, session_id)
-        except Exception as exc2:
-            logger.warning("Retry also failed: %s", exc2)
+        logger.warning("Failed to fetch session history for key %s: %s", session_key, exc)
 
     messages: list[SessionMessage] = []
     for m in raw_msgs:
@@ -2020,10 +2085,37 @@ async def get_session_history(
             content = "\n".join(text_parts)
         if not content or not content.strip():
             continue
+
+        # ── Clean up user messages ───────────────────────────────────
+        # The gateway stores the full prompt sent to the LLM, which
+        # includes system-injected blocks (workspace snapshot, credential
+        # storage info) prepended before the actual user text.  Strip
+        # these so the history shows only what the user actually typed.
+        if role == "user":
+            content = _strip_system_prefix(content)
+            if not content:
+                continue
+
+        # ── Clean up assistant messages ──────────────────────────────
+        # Strip ``setup_skill`` / ``store_secret`` fenced code blocks
+        # that the live chat renders as interactive components.
+        if role == "assistant":
+            content = _strip_action_blocks(content)
+            if not content:
+                continue
+
+        # Normalise timestamp — gateway may return epoch-ms int or ISO string
+        raw_ts = m.get("timestamp") or m.get("ts")
+        if isinstance(raw_ts, (int, float)):
+            from datetime import datetime, timezone
+            raw_ts = datetime.fromtimestamp(raw_ts / 1000, tz=timezone.utc).isoformat()
+        elif raw_ts is not None:
+            raw_ts = str(raw_ts)
+
         messages.append(SessionMessage(
             role=role,
             content=content,
-            timestamp=m.get("timestamp") or m.get("ts"),
+            timestamp=raw_ts,
             tool_name=m.get("toolName") or m.get("name"),
         ))
 
