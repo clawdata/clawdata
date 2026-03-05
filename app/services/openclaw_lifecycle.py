@@ -567,17 +567,16 @@ async def stop_gateway() -> ActionResult:
 
 
 async def restart_gateway() -> ActionResult:
-    """Restart the OpenClaw gateway."""
-    oc_path = _which("openclaw")
-    if not oc_path:
-        return ActionResult(success=False, message="OpenClaw is not installed.")
+    """Restart the OpenClaw gateway (stop + start to pick up fresh .env)."""
+    from app.schemas.lifecycle import GatewayStartRequest
 
-    rc, out, err = await _run(["openclaw", "gateway", "restart"], timeout=30)
-    combined = f"{out}\n{err}".strip()
+    stop_result = await stop_gateway()
+    if not stop_result.success:
+        logger.warning("Stop during restart failed: %s — trying start anyway", stop_result.message)
 
-    if rc == 0:
-        return ActionResult(success=True, message="Gateway restarted.", output=combined)
-    return ActionResult(success=False, message=f"Restart failed (exit {rc}).", output=combined)
+    await asyncio.sleep(1)  # let the port free up
+
+    return await start_gateway(GatewayStartRequest(force=True))
 
 
 # ── Health & doctor ──────────────────────────────────────────────────
@@ -928,6 +927,13 @@ def _write_agent_auth(provider_id: str, api_key: str, agent_id: str = "main") ->
         "provider": provider_id,
         "key": api_key,
     }
+    # Clear any cached failure / cooldown state so the gateway retries
+    # immediately with the new key instead of circuit-breaking.
+    usage = profiles.get("usageStats", {})
+    if profile_id in usage:
+        del usage[profile_id]
+        profiles["usageStats"] = usage
+
     profiles_path.write_text(json.dumps(profiles, indent=2) + "\n")
 
     # 2. Update auth.json (simplified lookup)
@@ -1122,7 +1128,7 @@ async def reset_all_agents() -> ActionResult:
 
     errors: list[str] = []
 
-    # 1. Delete non-main agents from the gateway
+    # 1. Delete non-main agents from the gateway (with files)
     try:
         await openclaw.connect()
         raw = await openclaw.list_agents()
@@ -1131,11 +1137,24 @@ async def reset_all_agents() -> ActionResult:
             aid = a.get("id", "")
             if aid and aid != main_key:
                 try:
-                    await openclaw.delete_agent(aid, delete_files=False)
+                    await openclaw.delete_agent(aid, delete_files=True)
                 except Exception as exc:
                     errors.append(f"gateway delete {aid}: {exc}")
     except Exception as exc:
         errors.append(f"gateway list: {exc}")
+
+    # 1b. Remove non-main agent directories from ~/.openclaw/agents/
+    #     The gateway auto-discovers agents from these dirs on restart,
+    #     so leaving them would cause agents to reappear.
+    try:
+        gw_agents_dir = OPENCLAW_HOME / "agents"
+        if gw_agents_dir.is_dir():
+            for entry in gw_agents_dir.iterdir():
+                if entry.is_dir() and entry.name != "main":
+                    shutil.rmtree(entry, ignore_errors=True)
+                    logger.info("Removed gateway agent dir: %s", entry.name)
+    except Exception as exc:
+        errors.append(f"cleanup ~/.openclaw/agents: {exc}")
 
     # 2. Reset main agent identity on the gateway
     try:
@@ -1350,15 +1369,39 @@ async def update_openclaw_agent(
 async def delete_openclaw_agent(
     agent_id: str, *, delete_files: bool = True
 ) -> ActionResult:
-    """Delete an agent via the gateway."""
+    """Delete an agent via the gateway and local DB."""
     from app.adapters.openclaw import openclaw
+    from app.database import async_session
+    from app.services.agent_service import delete_agent as delete_agent_local
 
+    gateway_ok = False
+    gateway_err = ""
     try:
         await openclaw.connect()
         await openclaw.delete_agent(agent_id, delete_files=delete_files)
-        return ActionResult(success=True, message=f"Agent '{agent_id}' deleted")
+        gateway_ok = True
     except Exception as exc:
-        return ActionResult(success=False, message=str(exc))
+        gateway_err = str(exc)
+        logger.warning("Gateway delete for '%s' failed: %s", agent_id, exc)
+
+    # Always clean up the local DB row regardless of gateway result
+    try:
+        async with async_session() as db:
+            await delete_agent_local(db, agent_id)
+    except Exception as exc:
+        logger.warning("Local DB delete for '%s' failed: %s", agent_id, exc)
+
+    # Also remove the gateway's agent state dir so it doesn't rediscover on restart
+    gw_agent_dir = OPENCLAW_HOME / "agents" / agent_id
+    if gw_agent_dir.is_dir():
+        shutil.rmtree(gw_agent_dir, ignore_errors=True)
+
+    if gateway_ok:
+        return ActionResult(success=True, message=f"Agent '{agent_id}' deleted")
+    # Still report success if only the gateway was missing the agent
+    if "not found" in gateway_err.lower():
+        return ActionResult(success=True, message=f"Agent '{agent_id}' removed (was already gone from gateway)")
+    return ActionResult(success=False, message=gateway_err)
 
 
 # ── Skills ───────────────────────────────────────────────────────────
@@ -1501,7 +1544,12 @@ async def set_env_key(key: str, value: str) -> ActionResult:
         # gateway can resolve the key without a restart.
         provider_id = _env_var_to_provider(key)
         if provider_id and value:
-            _write_agent_auth(provider_id, value)
+            # Update auth for all agents, not just main
+            agents_dir = OPENCLAW_HOME / "agents"
+            if agents_dir.is_dir():
+                for agent_dir in agents_dir.iterdir():
+                    if agent_dir.is_dir():
+                        _write_agent_auth(provider_id, value, agent_dir.name)
 
         # Also create a SecretRef in openclaw.json so the secrets manager
         # knows about this credential (unified system).

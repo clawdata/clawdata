@@ -199,13 +199,28 @@ export function SetupWizardContent({
     setMsg(null);
     try {
       const r = await lifecycleApi.setEnv(prov.env_var, apiKeyValue);
-      setMsg({ text: r.message, ok: r.success });
       if (r.success) {
         log(`Saved ${prov.env_var}`);
         setApiKeyValue("");
         setShowKey(false);
         await refreshProviders();
         await refreshEnv();
+        // If gateway is already running, restart it automatically to pick up the new key
+        if (isRunning) {
+          setMsg({ text: "Restarting gateway with new key…", ok: true });
+          log("Restarting gateway to pick up new key...");
+          const restart = await lifecycleApi.restart();
+          log(restart.output || restart.message);
+          if (restart.success) {
+            setMsg({ text: "Key saved and gateway restarted", ok: true });
+          } else {
+            setMsg({ text: `Key saved but restart failed: ${restart.message}`, ok: false });
+          }
+        } else {
+          setMsg({ text: r.message, ok: true });
+        }
+      } else {
+        setMsg({ text: r.message, ok: false });
       }
     } catch (e) {
       setMsg({ text: `Error: ${e}`, ok: false });
@@ -220,6 +235,11 @@ export function SetupWizardContent({
       await lifecycleApi.deleteEnv(key);
       await refreshProviders();
       await refreshEnv();
+      // Auto-restart gateway if running so it drops the old key
+      if (isRunning) {
+        log(`Removed ${key}, restarting gateway...`);
+        await lifecycleApi.restart();
+      }
     } catch (e) {
       setMsg({ text: `Error: ${e}`, ok: false });
     } finally {

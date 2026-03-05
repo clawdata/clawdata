@@ -95,8 +95,12 @@ export function ChatHistory({
     e.stopPropagation();
     setDeleting(session.key);
     try {
-      await lifecycleApi.deleteSession(session.key);
-      toast.success("Session deleted");
+      const result = await lifecycleApi.deleteSession(session.key);
+      if (result.success) {
+        toast.success("Session deleted");
+      } else {
+        toast.error(`Delete failed: ${result.message}`);
+      }
       mutate();
     } catch (err) {
       toast.error(`Delete failed: ${String(err)}`);
@@ -112,11 +116,19 @@ export function ChatHistory({
       const results = await Promise.allSettled(
         keys.map((k) => lifecycleApi.deleteSession(k))
       );
-      const failed = results.filter((r) => r.status === "rejected").length;
-      if (failed === 0) {
-        toast.success(`Deleted ${keys.length} session${keys.length > 1 ? "s" : ""}`);
+      let successCount = 0;
+      let failCount = 0;
+      for (const r of results) {
+        if (r.status === "rejected") failCount++;
+        else if (!r.value.success) failCount++;
+        else successCount++;
+      }
+      if (failCount === 0) {
+        toast.success(`Deleted ${successCount} session${successCount > 1 ? "s" : ""}`);
+      } else if (successCount > 0) {
+        toast.warning(`Deleted ${successCount} of ${keys.length} (${failCount} failed)`);
       } else {
-        toast.warning(`Deleted ${keys.length - failed} of ${keys.length} (${failed} failed)`);
+        toast.error(`Failed to delete sessions`);
       }
       exitSelectMode();
       mutate();
@@ -159,9 +171,9 @@ export function ChatHistory({
                   size="icon"
                   className="h-6 w-6"
                   onClick={() => setSelectMode(true)}
-                  title="Select sessions"
+                  title="Delete sessions"
                 >
-                  <CheckSquare className="h-3.5 w-3.5" />
+                  <Trash2 className="h-3.5 w-3.5" />
                 </Button>
               )}
               <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onClose}>

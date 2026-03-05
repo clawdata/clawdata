@@ -365,6 +365,57 @@ def _tool_touches_secrets(tool_name: str, args: dict[str, Any]) -> str | None:
     return None
 
 
+# ── Skill → env-var reverse mapping ──────────────────────────────────
+
+_ENV_TO_SKILL_CACHE: dict[str, str] | None = None
+
+
+def _build_env_to_skill_map() -> dict[str, str]:
+    """Return a map from env-var name → skill name for every skill with secrets."""
+    global _ENV_TO_SKILL_CACHE
+    if _ENV_TO_SKILL_CACHE is not None:
+        return _ENV_TO_SKILL_CACHE
+    mapping: dict[str, str] = {}
+    skills_dir = settings.skills_dir
+    if skills_dir.exists():
+        for child in skills_dir.iterdir():
+            if child.is_dir():
+                secrets = _get_skill_secrets(child.name)
+                if secrets:
+                    for s in secrets:
+                        mapping[s["env_var"]] = child.name
+    _ENV_TO_SKILL_CACHE = mapping
+    return mapping
+
+
+def _find_skill_for_tool_args(args: dict[str, Any]) -> str | None:
+    """If tool args reference env vars belonging to a known skill, return that skill name."""
+    env_to_skill = _build_env_to_skill_map()
+    if not env_to_skill:
+        return None
+    # Serialise all arg values to search for ${ENV_VAR} patterns
+    args_blob = " ".join(str(v) for v in args.values()).upper()
+    matched_skills: set[str] = set()
+    for env_var, skill in env_to_skill.items():
+        if env_var in args_blob:
+            matched_skills.add(skill)
+    return matched_skills.pop() if len(matched_skills) == 1 else (next(iter(matched_skills)) if matched_skills else None)
+
+
+async def _check_skill_secrets_missing(skill_name: str) -> list[dict[str, Any]] | None:
+    """If a skill has secrets that are NOT configured, return enriched fields for setup.
+
+    Returns None if all secrets are configured (or skill has no secrets).
+    """
+    fields = await _get_skill_secrets_with_status(skill_name)
+    if not fields:
+        return None
+    unconfigured = [f for f in fields if not f.get("configured")]
+    if not unconfigured:
+        return None  # all configured → no setup needed
+    return fields  # return ALL fields so the form shows the full picture
+
+
 # ── Store-secret block extraction ────────────────────────────────────
 
 import re as _re
@@ -762,6 +813,7 @@ async def send_and_stream(
         saw_spawn = False
         assistant_text = ""
         tools_invoked: list[dict[str, Any]] = []   # track every tool call
+        secrets_prompted_this_run = False  # True once we've asked; one prompt per run
 
         # Track concurrent (other) runs — likely inline sub-agent work
         other_runs: dict[str, str] = {}       # run_id → accumulated text
@@ -900,54 +952,76 @@ async def send_and_stream(
                 yield ev
 
                 # ── Secrets access detection ─────────────────────────
-                # When a tool_start touches a secret-bearing surface,
-                # emit a secrets_access event so the UI can show an
-                # approval card to the user.
-                if ev.get("type") == "tool_start":
+                # Once per run: check if the tool references a skill with
+                # MISSING secrets → emit skill_setup instead of approval.
+                # If secrets are present → emit a single secrets_access
+                # approval prompt.  Subsequent tools are silently allowed.
+                if not secrets_prompted_this_run and ev.get("type") == "tool_start":
                     tool_name = ev.get("content", "").split(":")[0].strip()
                     tool_args = (ev.get("metadata") or {}).get("args", {})
                     secret_field = _tool_touches_secrets(tool_name, tool_args)
                     if secret_field:
-                        import uuid as _uuid
-                        req_id = f"sa-{_uuid.uuid4().hex[:12]}"
-                        from app.schemas.secrets_manager import SecretRef, SecretSource
-                        from app.services import secrets_manager as _sm
-                        try:
-                            ref = SecretRef(
-                                source=SecretSource.ENV,
-                                provider="default",
-                                id=secret_field.upper().replace(".", "_")
-                                  if not secret_field.startswith("/")
-                                  else secret_field,
+                        secrets_prompted_this_run = True
+
+                        # Identify the skill and check if its secrets exist
+                        _matched_skill = _find_skill_for_tool_args(tool_args)
+                        _missing_fields: list[dict[str, Any]] | None = None
+                        if _matched_skill:
+                            _missing_fields = await _check_skill_secrets_missing(_matched_skill)
+
+                        if _missing_fields and _matched_skill:
+                            # ── Secrets MISSING → show setup form ────
+                            yield {
+                                "type": "skill_setup",
+                                "skill": _matched_skill,
+                                "fields": _missing_fields,
+                                "agent_id": agent_id,
+                                "run_id": run_id,
+                            }
+                        else:
+                            # ── Secrets present → approval dialog ────
+                            import uuid as _uuid
+                            req_id = f"sa-{_uuid.uuid4().hex[:12]}"
+                            from app.schemas.secrets_manager import SecretRef, SecretSource
+                            from app.services import secrets_manager as _sm
+                            _ref_id = (
+                                secret_field.upper().replace(".", "_")
+                                if not secret_field.startswith("/")
+                                else secret_field
                             )
-                        except Exception:
-                            # If we can't construct a valid SecretRef, use a generic one
-                            ref = SecretRef(
-                                source=SecretSource.ENV,
-                                provider="default",
-                                id="SECRET_VALUE",
+                            try:
+                                ref = SecretRef(
+                                    source=SecretSource.ENV,
+                                    provider="default",
+                                    id=_ref_id,
+                                )
+                            except Exception:
+                                ref = SecretRef(
+                                    source=SecretSource.ENV,
+                                    provider="default",
+                                    id="SECRET_VALUE",
+                                )
+                            await _sm.create_access_request(
+                                request_id=req_id,
+                                agent_id=agent_id,
+                                ref=ref,
+                                field=secret_field,
+                                reason=f"Tool '{tool_name}' needs access to a credential",
+                                session_key=session_key if isinstance(session_key, str) else None,
                             )
-                        await _sm.create_access_request(
-                            request_id=req_id,
-                            agent_id=agent_id,
-                            ref=ref,
-                            field=secret_field,
-                            reason=f"Tool '{tool_name}' needs access to a credential",
-                            session_key=session_key if isinstance(session_key, str) else None,
-                        )
-                        yield {
-                            "type": "secrets_access",
-                            "request_id": req_id,
-                            "agent_id": agent_id,
-                            "field": secret_field,
-                            "ref": {
-                                "source": ref.source,
-                                "provider": ref.provider,
-                                "id": ref.id,
-                            },
-                            "reason": f"Tool '{tool_name}' needs access to a credential",
-                            "run_id": run_id,
-                        }
+                            yield {
+                                "type": "secrets_access",
+                                "request_id": req_id,
+                                "agent_id": agent_id,
+                                "field": secret_field,
+                                "ref": {
+                                    "source": ref.source,
+                                    "provider": ref.provider,
+                                    "id": ref.id,
+                                },
+                                "reason": f"Tool '{tool_name}' needs access to a credential",
+                                "run_id": run_id,
+                            }
 
                 # If lifecycle errored, also yield an explicit error event for the UI
                 if is_end and stream == "lifecycle" and data.get("phase") == "error":

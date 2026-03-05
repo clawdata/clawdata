@@ -294,6 +294,14 @@ async def sync_openclaw_agents(
             _seed_workspace(workspace)
             synced.append(agent)
 
+    # Remove agents from DB that are no longer on the gateway
+    gateway_ids = {gw["id"] for gw in gateway_agents}
+    all_agents = await list_agents(db)
+    for agent in all_agents:
+        if agent.source == "openclaw" and agent.id not in gateway_ids:
+            logger.info("Removing stale agent '%s' (no longer on gateway)", agent.id)
+            await db.delete(agent)
+
     await db.commit()
     for a in synced:
         await db.refresh(a)
