@@ -34,7 +34,13 @@ function CodeComponent({ className: codeClass, children, ...rest }: any) {
     return <CodeBlock language={language} code={codeString} />;
   }
   return (
-    <code className={cn("rounded bg-muted px-1 py-0.5 text-xs font-mono", codeClass)} {...rest}>
+    <code
+      className={cn(
+        "rounded-md bg-muted/80 border border-border/40 px-1.5 py-0.5 text-[0.8em] font-mono text-foreground/90",
+        codeClass,
+      )}
+      {...rest}
+    >
       {children}
     </code>
   );
@@ -42,30 +48,30 @@ function CodeComponent({ className: codeClass, children, ...rest }: any) {
 
 function TableComponent({ children }: { children?: React.ReactNode }) {
   return (
-    <div className="my-2 overflow-x-auto rounded-lg border">
+    <div className="my-3 overflow-x-auto rounded-lg border border-border/60 shadow-sm">
       <table className="min-w-full text-xs">{children}</table>
     </div>
   );
 }
 
 function TheadComponent({ children }: { children?: React.ReactNode }) {
-  return <thead className="bg-muted/50">{children}</thead>;
+  return <thead className="bg-muted/60 border-b">{children}</thead>;
 }
 
 function ThComponent({ children }: { children?: React.ReactNode }) {
   return (
-    <th className="border-b bg-muted px-3 py-1.5 text-left text-xs font-semibold">
+    <th className="px-3 py-2 text-left text-xs font-semibold text-foreground/80 whitespace-nowrap">
       {children}
     </th>
   );
 }
 
 function TdComponent({ children }: { children?: React.ReactNode }) {
-  return <td className="border-b px-3 py-1.5 text-xs tabular-nums">{children}</td>;
+  return <td className="border-t border-border/30 px-3 py-1.5 text-xs tabular-nums">{children}</td>;
 }
 
 function TrComponent({ children }: { children?: React.ReactNode }) {
-  return <tr className="transition-colors hover:bg-muted/30">{children}</tr>;
+  return <tr className="transition-colors hover:bg-muted/30 even:bg-muted/10">{children}</tr>;
 }
 
 function AComponent({ href, children }: { href?: string; children?: React.ReactNode }) {
@@ -82,47 +88,59 @@ function AComponent({ href, children }: { href?: string; children?: React.ReactN
 }
 
 function PComponent({ children }: { children?: React.ReactNode }) {
-  return <p className="my-1 leading-relaxed">{children}</p>;
+  return <p className="my-1.5 leading-relaxed first:mt-0 last:mb-0">{children}</p>;
 }
 
 function UlComponent({ children }: { children?: React.ReactNode }) {
-  return <ul className="my-1 ml-4 list-disc space-y-0.5">{children}</ul>;
+  return <ul className="my-2 ml-4 list-disc space-y-1 marker:text-muted-foreground/60">{children}</ul>;
 }
 
 function OlComponent({ children }: { children?: React.ReactNode }) {
-  return <ol className="my-1 ml-4 list-decimal space-y-0.5">{children}</ol>;
+  return <ol className="my-2 ml-4 list-decimal space-y-1 marker:text-muted-foreground/60">{children}</ol>;
 }
 
 function LiComponent({ children }: { children?: React.ReactNode }) {
-  return <li className="text-sm leading-relaxed">{children}</li>;
+  return (
+    <li className="text-sm leading-relaxed pl-0.5 [&>ul]:mt-1 [&>ol]:mt-1 [&>p]:my-0.5">
+      {children}
+    </li>
+  );
+}
+
+function StrongComponent({ children }: { children?: React.ReactNode }) {
+  return <strong className="font-semibold text-foreground">{children}</strong>;
+}
+
+function EmComponent({ children }: { children?: React.ReactNode }) {
+  return <em className="italic text-muted-foreground">{children}</em>;
 }
 
 function BlockquoteComponent({ children }: { children?: React.ReactNode }) {
   return (
-    <blockquote className="my-2 border-l-4 border-primary/40 bg-primary/5 pl-3 py-1 text-sm italic">
+    <blockquote className="my-3 border-l-4 border-primary/30 bg-primary/5 pl-4 pr-3 py-2 text-sm italic rounded-r-md [&>p]:my-0.5">
       {children}
     </blockquote>
   );
 }
 
 function H1Component({ children }: { children?: React.ReactNode }) {
-  return <h1 className="mt-3 mb-1 text-lg font-bold">{children}</h1>;
+  return <h1 className="mt-4 mb-2 text-lg font-bold tracking-tight border-b border-border/40 pb-1">{children}</h1>;
 }
 
 function H2Component({ children }: { children?: React.ReactNode }) {
-  return <h2 className="mt-3 mb-1 text-base font-bold">{children}</h2>;
+  return <h2 className="mt-4 mb-1.5 text-base font-bold tracking-tight">{children}</h2>;
 }
 
 function H3Component({ children }: { children?: React.ReactNode }) {
-  return <h3 className="mt-2 mb-1 text-sm font-semibold">{children}</h3>;
+  return <h3 className="mt-3 mb-1 text-sm font-semibold">{children}</h3>;
 }
 
 function H4Component({ children }: { children?: React.ReactNode }) {
-  return <h4 className="mt-2 mb-0.5 text-sm font-semibold text-muted-foreground">{children}</h4>;
+  return <h4 className="mt-2.5 mb-0.5 text-sm font-medium text-muted-foreground">{children}</h4>;
 }
 
 function HrComponent() {
-  return <hr className="my-3 border-t border-border" />;
+  return <hr className="my-4 border-t border-border/50" />;
 }
 
 const MD_COMPONENTS = {
@@ -137,6 +155,8 @@ const MD_COMPONENTS = {
   ul: UlComponent,
   ol: OlComponent,
   li: LiComponent,
+  strong: StrongComponent,
+  em: EmComponent,
   blockquote: BlockquoteComponent,
   h1: H1Component,
   h2: H2Component,
@@ -155,8 +175,11 @@ export const MarkdownContent = memo(function MarkdownContent({
   content,
   className,
 }: MarkdownContentProps) {
-  // Pre-process: inject chart blocks above markdown tables when applicable.
-  const enhanced = useMemo(() => injectChartsAboveTables(content), [content]);
+  // Pre-process: normalise structured AI output, then inject chart blocks.
+  const enhanced = useMemo(() => {
+    const normalised = normaliseStructuredOutput(content);
+    return injectChartsAboveTables(normalised);
+  }, [content]);
 
   // If the content looks like plain text (no markdown markers), render raw.
   const looksPlain = !hasMarkdownSyntax(content);
@@ -166,7 +189,7 @@ export const MarkdownContent = memo(function MarkdownContent({
   }
 
   return (
-    <div className={cn("prose prose-sm dark:prose-invert max-w-none", className)}>
+    <div className={cn("prose prose-sm dark:prose-invert max-w-none text-sm leading-relaxed", className)}>
       <ReactMarkdown
         remarkPlugins={REMARK_PLUGINS}
         components={MD_COMPONENTS}
@@ -248,9 +271,81 @@ function SvgRenderer({ svg }: { svg: string }) {
 
 function hasMarkdownSyntax(text: string): boolean {
   // Quick checks for common markdown markers (including • Unicode bullet)
-  return /```|^\s*#{1,6}\s|\*\*|__|\[.*\]\(.*\)|^\s*[-*+\u2022]\s|^\s*\d+\.\s|^\s*>\s|^\|/m.test(
-    text,
+  // Also detect structured output patterns: key::value, bold labels, multi-line with colons
+  if (
+    /```|^\s*#{1,6}\s|\*\*|__|\[.*\]\(.*\)|^\s*[-*+\u2022]\s|^\s*\d+\.\s|^\s*>\s|^\|/m.test(text)
+  ) {
+    return true;
+  }
+
+  // Detect structured key-value patterns (e.g. "schema:: table1, table2")
+  if (/^.{1,40}\s*::\s*.+/m.test(text)) return true;
+
+  // Detect multiple lines with colon-separated labels (structured list output)
+  const colonLines = text.split("\n").filter((l) => /^\s*\S+.*:\s+\S/.test(l.trim()));
+  if (colonLines.length >= 3) return true;
+
+  // Detect content with multiple newlines (multi-paragraph responses)
+  if ((text.match(/\n\n/g) || []).length >= 2) return true;
+
+  return false;
+}
+
+/* ── Normalise structured AI output ──────────────────────────────── */
+
+/**
+ * Pre-process common structured patterns from AI output into proper markdown.
+ *
+ * Handles patterns like:
+ * - "schema_name:: table1, table2, table3" → bold label with comma-separated items
+ * - "SHOW TABLES IN X returned N objects:" → summary line formatting
+ * - Consecutive key:: value lines → structured list with bold keys
+ * - Plain numbered results without markdown → convert to proper lists
+ */
+function normaliseStructuredOutput(text: string): string {
+  if (!text || text.length < 10) return text;
+
+  let result = text;
+
+  // ── Pattern 1: "key:: value1, value2, value3" lines → bold key with inline code items
+  // e.g. "bronze_: customers, orders, payments" → "**bronze_:** `customers`, `orders`, `payments`"
+  result = result.replace(
+    /^(\s*[-*+\u2022]\s+)?(\S[^:\n]{0,40}?)\s*:{1,2}\s+(\S[^:\n]*(?:,\s*\S[^:\n]*)*)$/gm,
+    (_match, bullet, key, values) => {
+      const prefix = bullet || "";
+      const trimKey = key.trim();
+      const items = values
+        .split(/,\s*/)
+        .map((v: string) => v.trim())
+        .filter(Boolean);
+
+      // Only transform if there are multiple items (looks like a list)
+      if (items.length < 2) {
+        return `${prefix}**${trimKey}:** ${values.trim()}`;
+      }
+      const formatted = items.map((i: string) => `\`${i}\``).join(", ");
+      return `${prefix}**${trimKey}:** ${formatted}`;
+    },
   );
+
+  // ── Pattern 2: Lines like "returned N objects:" → make it a heading-like bold line
+  result = result.replace(
+    /^(.*(?:returned|found|shows?|contains?|listing)\s+\d+\s+(?:objects?|items?|tables?|results?|rows?).*?)$/gmi,
+    (_match, line) => {
+      // Don't double-bold
+      if (line.trim().startsWith("**")) return line;
+      return `**${line.trim()}**`;
+    },
+  );
+
+  // ── Pattern 3: Ensure blank lines between structural sections for proper paragraph breaks
+  // Fix consecutive lines that should have paragraph breaks (e.g. a summary followed by a list)
+  result = result.replace(/([^\n])\n([-*+\u2022]\s)/g, "$1\n\n$2");
+
+  // ── Pattern 4: Fix orphaned bullet items that lack a preceding blank line after a heading/paragraph
+  result = result.replace(/([^\n-*+\u2022].*\S)\n(\s*[-*+\u2022]\s)/g, "$1\n\n$2");
+
+  return result;
 }
 
 /* ── Auto-chart injection ────────────────────────────────────────── */
