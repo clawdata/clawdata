@@ -113,6 +113,12 @@ async def chat_ws(ws: WebSocket, agent_id: str):
                         await secrets_svc.reload_secrets()
                     except Exception:
                         pass
+                    # Push updated env vars to the running gateway so
+                    # skills can use them without a full gateway restart.
+                    try:
+                        await chat_service.sync_skill_env_to_gateway(env_var)
+                    except Exception:
+                        logger.debug("sync_skill_env_to_gateway failed", exc_info=True)
                     await _safe_send({
                         "type": "secrets_stored",
                         "field": field,

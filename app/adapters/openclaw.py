@@ -231,14 +231,21 @@ class OpenClawAdapter(AIBackendAdapter):
 
         # Attempt connection with auto-pairing retry
         max_pair_attempts = 3
+        last_err: Exception | None = None
         for attempt in range(max_pair_attempts):
-            await self._do_connect_handshake(attempt=attempt)
+            try:
+                await self._do_connect_handshake(attempt=attempt)
+            except (ConnectionError, TimeoutError, OSError) as exc:
+                last_err = exc
+                logger.warning("Connect attempt %d failed: %s", attempt + 1, exc)
+                await asyncio.sleep(1)
+                continue
             if self._connected:
                 return
         # If we exhausted retries without connecting, raise
         raise ConnectionError(
-            "Failed to connect to OpenClaw gateway after pairing attempts. "
-            "Try: openclaw devices approve --latest"
+            f"Failed to connect to OpenClaw gateway after {max_pair_attempts} attempts. "
+            f"Last error: {last_err}. Try: openclaw devices approve --latest"
         )
 
     async def _do_connect_handshake(self, *, attempt: int = 0) -> None:
@@ -246,10 +253,21 @@ class OpenClawAdapter(AIBackendAdapter):
         url = settings.openclaw_ws_url
         logger.info("Connecting to OpenClaw gateway at %s (attempt %d)", url, attempt + 1)
 
-        self._ws = await websockets.connect(url)
+        try:
+            self._ws = await asyncio.wait_for(websockets.connect(url), timeout=10.0)
+        except (TimeoutError, OSError) as exc:
+            logger.warning("Gateway WS connect timed out or refused (attempt %d): %s", attempt + 1, exc)
+            self._ws = None
+            raise ConnectionError(f"Gateway unreachable: {exc}") from exc
 
         # Wait for connect.challenge event
-        raw = await self._ws.recv()
+        try:
+            raw = await asyncio.wait_for(self._ws.recv(), timeout=10.0)
+        except TimeoutError:
+            logger.warning("Gateway did not send challenge within timeout (attempt %d)", attempt + 1)
+            await self._ws.close()
+            self._ws = None
+            raise ConnectionError("Gateway did not send connect.challenge in time")
         challenge = json.loads(raw)
         if challenge.get("event") != "connect.challenge":
             raise ConnectionError(f"Expected connect.challenge, got: {challenge}")
@@ -308,7 +326,13 @@ class OpenClawAdapter(AIBackendAdapter):
         await self._ws.send(json.dumps(connect_req))
 
         # Wait for hello-ok
-        raw = await self._ws.recv()
+        try:
+            raw = await asyncio.wait_for(self._ws.recv(), timeout=10.0)
+        except TimeoutError:
+            logger.warning("Gateway did not respond to connect request (attempt %d)", attempt + 1)
+            await self._ws.close()
+            self._ws = None
+            raise ConnectionError("Gateway did not respond to connect request in time")
         hello = json.loads(raw)
         if not hello.get("ok"):
             error = hello.get("error", {})

@@ -152,7 +152,7 @@ async def lifespan(app: FastAPI):
             },
             "gateway": {"mode": "local"},
             "agents": {
-                "defaults": {"model": {"primary": "openai/gpt-4.1-mini"}},
+                "defaults": {"model": {"primary": "openai/gpt-5.1-codex"}},
             },
         }
         config_path.write_text(_json.dumps(minimal_config, indent=2) + "\n")

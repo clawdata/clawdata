@@ -200,6 +200,11 @@ export function useAgentChat(
 
   /* ── Streaming helpers ─────────────────────────────────────────── */
 
+  /** Strip setup_skill / store_secret fenced blocks from assistant text */
+  function stripActionBlocks(text: string): string {
+    return text.replace(/```(?:setup_skill|store_secret)\s*\n[\s\S]*?\n```/g, "").trim();
+  }
+
   function appendAssistantDelta(delta: string) {
     setMessages((prev) => {
       const last = prev[prev.length - 1];
@@ -227,8 +232,14 @@ export function useAgentChat(
     setMessages((prev) => {
       const last = prev[prev.length - 1];
       if (last && last.role === "assistant" && last.streaming) {
+        const cleaned = stripActionBlocks(last.content);
         const updated = [...prev];
-        updated[updated.length - 1] = { ...last, streaming: false };
+        if (!cleaned) {
+          // Nothing left after stripping — remove the empty assistant bubble
+          updated.pop();
+        } else {
+          updated[updated.length - 1] = { ...last, content: cleaned, streaming: false };
+        }
         return updated;
       }
       return prev;
@@ -547,7 +558,15 @@ export function useAgentChat(
             ),
           );
         } else if (type === "skill_setup") {
-          // Skill setup form — render the input card
+          // Skill setup form — render the input card (dedup by skill name)
+          const skillName = data.skill ?? "";
+          const alreadyShown = (prev: ChatMessage[]) =>
+            prev.some(
+              (m) =>
+                m.role === "skill_setup" &&
+                m.skillSetup?.skill === skillName &&
+                m.skillSetup?.status === "pending",
+            );
           const fields: SkillSetupField[] = (data.fields ?? []).map(
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             (f: any) => ({
@@ -563,15 +582,18 @@ export function useAgentChat(
             fields,
             status: "pending",
           };
-          setMessages((prev) => [
-            ...prev,
-            {
-              role: "skill_setup",
-              content: `Configure ${setupData.skill} credentials`,
-              timestamp: new Date(),
-              skillSetup: setupData,
-            },
-          ]);
+          setMessages((prev) => {
+            if (alreadyShown(prev)) return prev;
+            return [
+              ...prev,
+              {
+                role: "skill_setup",
+                content: `Configure ${setupData.skill} credentials`,
+                timestamp: new Date(),
+                skillSetup: setupData,
+              },
+            ];
+          });
         }
       } catch {
         appendAssistantDelta(event.data);

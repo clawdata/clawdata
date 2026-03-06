@@ -46,41 +46,25 @@ def _sanitise_unicode(text: str) -> str:
 # ── Memory helpers ───────────────────────────────────────────────────
 
 _MEMORY_CONTEXT_HEADER = (
-    "[SYSTEM -- WORKSPACE FILE SNAPSHOT]\n"
-    "Below is a CURRENT snapshot of your workspace files. "
-    "DO NOT re-read these files with your tools -- you already have their full contents here. "
-    "Only use your file tools to WRITE updates or to read files NOT listed below. "
-    "These are YOUR files -- continue to update them as instructed in AGENTS.md."
+    "[SYSTEM -- WORKSPACE SNAPSHOT]\n"
+    "Current workspace files below. Do not re-read these -- use tools only to write or read unlisted files."
 )
 _MEMORY_CONTEXT_FOOTER = "[END WORKSPACE SNAPSHOT]"
 
 # System instruction for secrets storage capability
 _SECRETS_STORE_INSTRUCTION_HEADER = (
-    "[SYSTEM -- CREDENTIAL STORAGE CAPABILITY]\n"
-    "You can store credentials in the secrets manager. When you discover "
-    "credentials (API keys, tokens, passwords) via exec or any tool, and "
-    "the user asks you to store/save them in secrets, output a JSON block "
-    "in this EXACT format on its own line:\n"
+    "[SYSTEM -- CREDENTIALS]\n"
+    "To store a credential, output:\n"
     "```store_secret\n"
-    '{"field": "<dotted.config.path>", "env_var": "<ENV_VAR_NAME>", '
-    '"value": "<the_actual_secret_value>", "label": "<Human Label>"}\n'
+    '{"field": "<path>", "env_var": "<ENV_VAR>", "value": "<secret>", "label": "<label>"}\n'
     "```\n"
-    "You may output multiple store_secret blocks if storing multiple credentials.\n"
-    "The system will intercept these blocks, prompt the user for confirmation, "
-    "and store them securely. NEVER show the full secret value in plain text "
-    "outside the store_secret block.\n"
-    "For any credential not listed below, use a descriptive field like "
-    '"integrations.<name>.token" and an appropriate ENV_VAR_NAME.\n'
-    "\n"
-    "You can also prompt the user to configure credentials for a skill by "
-    "outputting a setup_skill block. This renders a secure input form in "
-    "chat -- the user fills in values directly and the LLM NEVER sees them.\n"
+    "To prompt the user to configure a skill's credentials, output:\n"
     "```setup_skill\n"
     '{"skill": "<skill_name>"}\n'
     "```\n"
-    "Use this when the user says 'setup <skill> credentials', "
-    "'configure <skill> auth', or similar. The system will look up "
-    "what credentials the skill needs and show the appropriate form.\n"
+    "Use setup_skill when credentials are missing or invalid. "
+    "Never ask for credentials in plain text. "
+    "Output at most ONE setup_skill block per response, then stop and wait.\n"
 )
 
 
@@ -540,6 +524,48 @@ def _get_skill_secrets(skill_name: str) -> list[dict[str, Any]] | None:
     return None
 
 
+async def sync_skill_env_to_gateway(env_var: str | None = None) -> None:
+    """Push skill env vars to the running gateway via skills.update RPC.
+
+    If *env_var* is given, only syncs the skill that owns that env var.
+    If ``None``, syncs ALL skills that have secrets defined.
+    """
+    from app.adapters.openclaw import openclaw
+    from app.services.openclaw_lifecycle import _load_openclaw_env
+
+    env_to_skill = _build_env_to_skill_map()
+    if not env_to_skill:
+        return
+
+    dot_env = _load_openclaw_env()
+
+    # Determine which skills to sync
+    if env_var and env_var in env_to_skill:
+        skills_to_sync = {env_to_skill[env_var]}
+    elif env_var:
+        return  # env_var not associated with any skill
+    else:
+        skills_to_sync = set(env_to_skill.values())
+
+    for skill_name in skills_to_sync:
+        secrets = _get_skill_secrets(skill_name)
+        if not secrets:
+            continue
+        skill_env: dict[str, str] = {}
+        for s in secrets:
+            val = dot_env.get(s["env_var"], "")
+            if val:
+                skill_env[s["env_var"]] = val
+        if not skill_env:
+            continue
+        try:
+            await openclaw.connect()
+            await openclaw.skills_update(skill_key=skill_name, env=skill_env)
+            logger.info("Synced env vars to gateway skill '%s': %s", skill_name, list(skill_env))
+        except Exception as exc:
+            logger.warning("Failed to sync env to gateway skill '%s': %s", skill_name, exc)
+
+
 async def _get_skill_secrets_with_status(
     skill_name: str,
 ) -> list[dict[str, Any]] | None:
@@ -814,6 +840,7 @@ async def send_and_stream(
         assistant_text = ""
         tools_invoked: list[dict[str, Any]] = []   # track every tool call
         secrets_prompted_this_run = False  # True once we've asked; one prompt per run
+        emitted_skills: set[str] = set()  # dedup skill_setup cards
 
         # Track concurrent (other) runs — likely inline sub-agent work
         other_runs: dict[str, str] = {}       # run_id → accumulated text
@@ -1096,8 +1123,11 @@ async def send_and_stream(
 
         # ── Detect setup_skill blocks in assistant text ──────────────
         for skill_name in _extract_setup_skill_requests(assistant_text):
+            if skill_name in emitted_skills:
+                continue
             skill_secrets = await _get_skill_secrets_with_status(skill_name)
             if skill_secrets:
+                emitted_skills.add(skill_name)
                 yield {
                     "type": "skill_setup",
                     "skill": skill_name,
