@@ -45,7 +45,7 @@ import { AgentGraph } from "@/components/agent-graph";
 export default function AgentsPage() {
   const router = useRouter();
   const { data, mutate } = useSWR<OpenClawAgentsList>(
-    "/api/openclaw/agents",
+    "/api/connection/agents",
     fetcher
   );
   const agents = data?.agents ?? [];
@@ -59,7 +59,7 @@ export default function AgentsPage() {
 
   // Fetch models when wizard is open
   const { data: modelsData } = useSWR<ModelsStatusResponse>(
-    open ? "/api/openclaw/models/status" : null,
+    open ? "/api/connection/models/status" : null,
     () => lifecycleApi.modelsStatus(),
   );
 
@@ -127,16 +127,26 @@ export default function AgentsPage() {
   }
 
   async function handleDelete(id: string) {
-    const result = await lifecycleApi.deleteAgent(id);
-    if (result.success) {
-      toast.success("Agent deleted");
-      await mutate();
-    } else {
-      toast.error(result.message);
+    setDeleting(true);
+    try {
+      const result = await lifecycleApi.deleteAgent(id);
+      if (result.success) {
+        toast.success("Agent deleted");
+        await mutate();
+      } else {
+        toast.error(result.message);
+      }
+    } catch (e) {
+      console.error(e);
+      toast.error("Failed to delete agent");
+    } finally {
+      setDeleting(false);
+      setDeleteTarget(null);
     }
   }
 
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   return (
     <div className="space-y-6">
@@ -511,15 +521,16 @@ export default function AgentsPage() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => {
+              disabled={deleting}
+              onClick={(e) => {
+                e.preventDefault();
                 if (deleteTarget) handleDelete(deleteTarget);
-                setDeleteTarget(null);
               }}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              Delete
+              {deleting ? <><Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> Deleting…</> : "Delete"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

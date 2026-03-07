@@ -470,7 +470,7 @@ export default function SkillsPage() {
 
 function ProjectSkillsTab() {
   const { data: projectSkills } = useSWR<WorkspaceSkill[]>(
-    "/api/openclaw/project-skills",
+    "/api/connection/project-skills",
     () => lifecycleApi.projectSkills()
   );
 
@@ -545,7 +545,7 @@ function ProjectSkillsTab() {
 
 function GatewaySkillsTab() {
   const { data, mutate } = useSWR<SkillsStatusResponse>(
-    "/api/openclaw/skills",
+    "/api/connection/skills",
     fetcher
   );
   const skills = data?.skills ?? [];

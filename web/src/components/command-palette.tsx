@@ -73,7 +73,7 @@ export function CommandPalette() {
 
   // Fetch agents for quick-nav (only when palette is open)
   const { data: agentsData } = useSWR<AgentsResponse>(
-    open ? "/api/openclaw/agents" : null,
+    open ? "/api/connection/agents" : null,
     fetcher,
   );
   const agents = agentsData?.agents ?? [];

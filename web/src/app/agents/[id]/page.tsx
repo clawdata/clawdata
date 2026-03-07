@@ -14,7 +14,6 @@ import {
   type WorkspaceSkill,
   type WorkspaceSkillsList,
 } from "@/lib/api";
-import { agentApi } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -85,17 +84,17 @@ export default function AgentDetailPage() {
   const agentId = params.id as string;
 
   const { data: detail, mutate: mutateDetail } = useSWR<AgentDetail>(
-    agentId ? `/api/openclaw/agents/${agentId}/detail` : null,
+    agentId ? `/api/connection/agents/${agentId}/detail` : null,
     fetcher
   );
 
   const { data: wsSkillsData, mutate: mutateWsSkills } = useSWR<WorkspaceSkillsList>(
-    agentId ? `/api/openclaw/agents/${agentId}/workspace-skills` : null,
+    agentId ? `/api/connection/agents/${agentId}/workspace-skills` : null,
     (url: string) => lifecycleApi.workspaceSkills(agentId)
   );
 
   const { data: allAgentsData } = useSWR<OpenClawAgentsList>(
-    "/api/openclaw/agents",
+    "/api/connection/agents",
     fetcher
   );
 
@@ -265,18 +264,12 @@ function OverviewTab({
         <CardContent className="space-y-2 text-sm">
           <div className="flex justify-between">
             <span className="text-muted-foreground">Workspace</span>
-            <button
-              onClick={() => agentApi.openFolder(detail.id)}
-              className="font-mono text-xs truncate max-w-[300px] text-blue-500 hover:underline cursor-pointer text-right"
-              title={`Open ${detail.workspace}`}
+            <span
+              className="font-mono text-xs truncate max-w-[300px] text-right"
+              title={detail.workspace}
             >
-              {detail.workspace}
-            </button>
-          </div>
-          <Separator />
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Source</span>
-            <Badge variant="outline" className="text-[10px]">{detail.source ?? "openclaw"}</Badge>
+              {detail.workspace || `~/.openclaw/agents/${detail.id}`}
+            </span>
           </div>
           <Separator />
           <div className="flex justify-between">
@@ -363,10 +356,8 @@ function LinkedAgentsCard({
       const linkedAgents = otherAgents.filter((a) => next.has(a.id));
       const linkedIds = linkedAgents.map((a) => a.id);
       const md = generateAgentsMd(linkedAgents);
-      await Promise.all([
-        lifecycleApi.setAgentFile(agentId, "AGENTS.md", md),
-        lifecycleApi.updateLinkedAgents(agentId, linkedIds),
-      ]);
+      await lifecycleApi.setAgentFile(agentId, "AGENTS.md", md);
+      await lifecycleApi.updateLinkedAgents(agentId, linkedIds);
     } catch (e) {
       console.error(e);
       // Revert

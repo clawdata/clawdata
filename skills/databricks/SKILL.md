@@ -28,10 +28,10 @@ curl -s -X POST "${DATABRICKS_HOST}/api/2.0/sql/statements" \
     "statement": "YOUR_SQL_HERE",
     "wait_timeout": "30s",
     "disposition": "INLINE"
-  }' | jq '{state: .status.state, data: .result.data_array}'
+  }' | jq '[.manifest.schema.columns[].name] as $cols | [.result.data_array[] | . as $row | reduce range(0;$cols|length) as $i ({}; .[$cols[$i]] = ($row[$i] | tonumber? // $row[$i]))]'
 ```
 
-Replace `YOUR_SQL_HERE` with the actual SQL. Always pipe through `jq`.
+Replace `YOUR_SQL_HERE` with the actual SQL. Always pipe through `jq` to produce a JSON array of objects with column names as keys.
 
 ## Example: "Create a dummy table"
 
@@ -56,7 +56,7 @@ Step 3 -- verify:
 curl -s -X POST "${DATABRICKS_HOST}/api/2.0/sql/statements" \
   -H "Authorization: Bearer ${DATABRICKS_TOKEN}" \
   -H "Content-Type: application/json" \
-  -d '{"warehouse_id":"'"${DATABRICKS_WAREHOUSE_ID}"'","statement":"SELECT * FROM default.test_customers","wait_timeout":"30s","disposition":"INLINE"}' | jq '.result.data_array'
+  -d '{"warehouse_id":"'"${DATABRICKS_WAREHOUSE_ID}"'","statement":"SELECT * FROM default.test_customers","wait_timeout":"30s","disposition":"INLINE"}' | jq '[.manifest.schema.columns[].name] as $cols | [.result.data_array[] | . as $row | reduce range(0;$cols|length) as $i ({}; .[$cols[$i]] = ($row[$i] | tonumber? // $row[$i]))]'
 ```
 
 ## Useful SQL Patterns
@@ -65,6 +65,7 @@ curl -s -X POST "${DATABRICKS_HOST}/api/2.0/sql/statements" \
 - Describe table: `"statement": "DESCRIBE TABLE default.my_table"`
 - Row count: `"statement": "SELECT COUNT(*) FROM default.my_table"` then `| jq '.result.data_array[0][0]'`
 - Column names: `| jq '[.manifest.schema.columns[].name]'`
+- **Query as JSON objects** (for charts/tables): `| jq '[.manifest.schema.columns[].name] as $cols | [.result.data_array[] | . as $row | reduce range(0;$cols|length) as $i ({}; .[$cols[$i]] = ($row[$i] | tonumber? // $row[$i]))]'`
 
 ## Verify Environment
 

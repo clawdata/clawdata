@@ -94,18 +94,18 @@ export function SetupWizardContent({
   initialStep,
 }: SetupWizardContentProps) {
   const { data: status } = useSWR<FullStatus>(
-    "/api/openclaw/status",
+    "/api/connection/status",
     fetcher,
     { refreshInterval: 5000 },
   );
   const { data: providers, mutate: refreshProviders } =
-    useSWR<ProvidersResponse>("/api/openclaw/providers", fetcher);
+    useSWR<ProvidersResponse>("/api/connection/providers", fetcher);
   const { data: envKeys, mutate: refreshEnv } = useSWR<EnvListResponse>(
-    "/api/openclaw/env",
+    "/api/connection/env",
     fetcher,
   );
   const { data: modelsStatus, mutate: refreshModels } =
-    useSWR<ModelsStatusResponse>("/api/openclaw/models/status", fetcher);
+    useSWR<ModelsStatusResponse>("/api/connection/models/status", fetcher);
 
   const [step, setStep] = useState(initialStep ?? 0);
   const [busy, setBusy] = useState(false);

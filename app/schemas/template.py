@@ -1,54 +1,23 @@
-"""Template request/response schemas."""
+"""Template schemas — lightweight file listing only.
 
-import json
-from datetime import datetime
-from typing import Any
+v2: Templates are browsed directly from the filesystem.
+No DB-backed CRUD or Jinja rendering.
+"""
 
-from pydantic import BaseModel, Field, field_validator
-
-
-class TemplateCreate(BaseModel):
-    id: str = Field(..., max_length=128)  # e.g. dbt/staging_model
-    name: str = Field(..., max_length=128)
-    category: str = Field(..., pattern=r"^(dbt|airflow|sql|custom)$")
-    description: str = ""
-    content: str  # Jinja2 template body
-    variables: list[str] = []  # expected variable names
+from pydantic import BaseModel
 
 
-class TemplateUpdate(BaseModel):
-    name: str | None = None
-    description: str | None = None
-    content: str | None = None
-    variables: list[str] | None = None
+class TemplateFileEntry(BaseModel):
+    """A file or folder in the templates directory tree."""
 
-
-class TemplateResponse(BaseModel):
-    id: str
     name: str
-    category: str
-    description: str
-    file_path: str
-    variables: list[str]
-    content: str | None = None
-    created_at: datetime
-    updated_at: datetime
-
-    @field_validator("variables", mode="before")
-    @classmethod
-    def parse_variables(cls, v: Any) -> list[str]:
-        if isinstance(v, str):
-            return json.loads(v)
-        return v
-
-    model_config = {"from_attributes": True}
+    path: str
+    type: str  # "file" | "folder"
+    size: int | None = None
+    children: list["TemplateFileEntry"] = []
 
 
-class TemplateRender(BaseModel):
-    """Render a template with the provided variables."""
-    variables: dict[str, Any]
+class TemplateBrowseResponse(BaseModel):
+    root: str
+    tree: list[TemplateFileEntry]
 
-
-class TemplateRenderResponse(BaseModel):
-    template_id: str
-    rendered: str

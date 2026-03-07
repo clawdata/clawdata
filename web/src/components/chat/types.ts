@@ -1,7 +1,7 @@
 /* Shared types used across chat components */
 
 export interface ChatMessage {
-  role: "user" | "assistant" | "system" | "tool" | "delegation" | "tool_activity" | "secrets_access" | "secrets_store" | "skill_setup";
+  role: "user" | "assistant" | "system" | "tool" | "delegation" | "tool_activity" | "secrets_store" | "skill_setup";
   content: string;
   timestamp: Date;
   streaming?: boolean;
@@ -9,23 +9,10 @@ export interface ChatMessage {
   toolPhase?: "start" | "end";
   /** Rich metadata for tool_activity messages */
   toolActivity?: ToolActivity;
-  /** Secrets access request data */
-  secretsAccess?: SecretsAccessData;
   /** Secrets store offer data */
   secretsStore?: SecretsStoreData;
   /** Skill setup form data */
   skillSetup?: SkillSetupData;
-}
-
-/** Data for a secrets access request rendered inline in chat */
-export interface SecretsAccessData {
-  requestId: string;
-  agentId: string;
-  field: string;
-  ref: { source: string; provider: string; id: string };
-  reason: string;
-  status: "pending" | "approved" | "denied";
-  valueMasked?: string;
 }
 
 /** Data for a secrets store offer rendered inline in chat */

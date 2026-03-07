@@ -1,4 +1,3 @@
-````skill
 ---
 name: azure
 description: "Manage Azure cloud resources -- resource groups, storage, databases, functions, and data services using the az CLI."
@@ -470,5 +469,3 @@ az storage fs create --name bronze --account-name <storage-name> --auth-mode log
 az storage fs create --name silver --account-name <storage-name> --auth-mode login
 az storage fs create --name gold --account-name <storage-name> --auth-mode login
 ```
-
-````

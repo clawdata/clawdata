@@ -15,12 +15,12 @@ import { SetupWizardDialog } from "@/components/openclaw/setup-wizard-dialog";
  */
 export function SetupBanner() {
   const { data: onboarding } = useSWR<OnboardingStatus>(
-    "/api/openclaw/onboarding",
+    "/api/connection/onboarding",
     fetcher,
     { refreshInterval: 30_000 },
   );
   const { data: status } = useSWR<FullStatus>(
-    "/api/openclaw/status",
+    "/api/connection/status",
     fetcher,
     { refreshInterval: 30_000 },
   );
@@ -37,7 +37,9 @@ export function SetupBanner() {
 
   const message = isNotInstalled
     ? "OpenClaw is not installed. Install it to enable AI-powered agents, chat, and skill execution."
-    : "OpenClaw is not fully configured. Complete the setup wizard to start using your AI assistant.";
+    : onboarding.issues?.length
+      ? `Setup issues: ${onboarding.issues.join(" · ")}`
+      : "OpenClaw is not fully configured. Complete the setup wizard to start using your AI assistant.";
 
   return (
     <>

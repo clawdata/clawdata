@@ -74,7 +74,7 @@ function truncateTitle(title: string | null, maxLen = 60): string {
 
 export default function CostingPage() {
   const { data, isLoading, mutate } = useSWR<CostingSummary>(
-    "/api/openclaw/costing",
+    "/api/connection/costing",
     fetcher,
     { refreshInterval: 30000 }
   );

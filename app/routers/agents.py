@@ -1,8 +1,5 @@
 """Agent CRUD endpoints."""
 
-import subprocess
-from pathlib import Path
-
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -51,13 +48,12 @@ async def delete_agent(agent_id: str, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Agent not found")
 
 
-@router.post("/{agent_id}/open-folder")
-async def open_agent_folder(agent_id: str, db: AsyncSession = Depends(get_db)):
-    agent = await agent_service.get_agent(db, agent_id)
-    if not agent:
-        raise HTTPException(status_code=404, detail="Agent not found")
-    folder = Path(agent.workspace_path).resolve()
-    if not folder.is_dir():
-        raise HTTPException(status_code=404, detail="Workspace folder not found on disk")
-    subprocess.Popen(["open", str(folder)])
-    return {"ok": True, "path": str(folder)}
+@router.post("/sync")
+async def sync_agents(db: AsyncSession = Depends(get_db)):
+    """Sync agents from the gateway into the local DB."""
+    from app.services import openclaw_lifecycle as lifecycle
+
+    gw_data = await lifecycle.list_openclaw_agents()
+    gateway_agents = gw_data.get("agents", [])
+    result = await agent_service.sync_agents_from_gateway(db, gateway_agents)
+    return {"synced": len(result), "agents": [a.id for a in result]}

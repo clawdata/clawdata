@@ -1,14 +1,12 @@
 """Chat WebSocket endpoint — proxies messages to/from OpenClaw.
 
 The handler runs **two concurrent loops** so that the client can send
-approval / store-secret messages *while* a chat stream is in progress.
+store-secret / skill-setup messages *while* a chat stream is in progress.
 
 * **receiver** – reads from the WebSocket and dispatches control messages
-  (secrets_resolve, store_secret, request_skill_setup) or queues new chat
-  requests.
+  (store_secret, request_skill_setup) or queues new chat requests.
 * **streamer** – consumes chat requests from *_chat_q* and streams gateway
-  events back.  When a ``secrets_access`` event is yielded the streamer
-  **pauses** (via an `asyncio.Event` gate) until the receiver resolves it.
+  events back.
 """
 
 import asyncio
@@ -20,24 +18,18 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from app.services import chat_service
 from app.services import secrets_manager as secrets_svc
-from app.schemas.secrets_manager import SecretsAccessResolve
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-# Timeout (seconds) to wait for the user to approve / deny before auto-denying.
-_APPROVAL_TIMEOUT = 300
-
 
 @router.websocket("/{agent_id}")
 async def chat_ws(ws: WebSocket, agent_id: str):
     """WebSocket chat relay.
 
     Client sends: {"message": "...", "session_key": "..."}
-              or: {"type": "secrets_resolve", "request_id": "...", "approved": true}
               or: {"type": "store_secret", "field": "...", "env_var": "...", "value": "..."}
-    Server sends: {"type": "text|tool_start|tool_end|status|error|secrets_access|secrets_stored", ...}
+    Server sends: {"type": "text|tool_start|tool_end|status|error|secrets_stored", ...}
     """
     await ws.accept()
     connection_session_key = f"agent:{agent_id}:clawdata-{uuid.uuid4()}"
@@ -47,7 +39,6 @@ async def chat_ws(ws: WebSocket, agent_id: str):
 
     # Shared state between receiver and streamer --------------------------
     send_lock = asyncio.Lock()
-    approval_gates: dict[str, asyncio.Event] = {}  # request_id → gate
     chat_queue: asyncio.Queue[tuple[str, str]] = asyncio.Queue()  # (message, session_key)
 
     async def _safe_send(msg: dict) -> None:
@@ -62,34 +53,6 @@ async def chat_ws(ws: WebSocket, agent_id: str):
             raw = await ws.receive_text()
             data = json.loads(raw)
             msg_type = data.get("type", "")
-
-            # ── Secrets access resolution ────────────────────
-            if msg_type == "secrets_resolve":
-                request_id = data.get("request_id", "")
-                approved = data.get("approved", False)
-                reason = data.get("reason", "")
-                try:
-                    result = await secrets_svc.resolve_access_request(
-                        request_id,
-                        SecretsAccessResolve(approved=approved, reason=reason),
-                    )
-                    await _safe_send({
-                        "type": "secrets_access_resolved",
-                        "request_id": request_id,
-                        "status": result.status,
-                        "resolved": result.resolved,
-                        "value_masked": result.value_masked,
-                    })
-                except ValueError as exc:
-                    await _safe_send({
-                        "type": "error",
-                        "content": f"Failed to resolve secrets request: {exc}",
-                    })
-                # Unblock the streamer if it's waiting on this request
-                gate = approval_gates.get(request_id)
-                if gate:
-                    gate.set()
-                continue
 
             # ── Store secret from chat ───────────────────────
             if msg_type == "store_secret":
@@ -173,7 +136,7 @@ async def chat_ws(ws: WebSocket, agent_id: str):
 
     # ── Streamer loop ────────────────────────────────────────────────
     async def _streamer() -> None:
-        """Pull chat requests from the queue, stream events, pause on approvals."""
+        """Pull chat requests from the queue and stream events to the client."""
         while True:
             message, session_key = await chat_queue.get()
             try:
@@ -183,32 +146,6 @@ async def chat_ws(ws: WebSocket, agent_id: str):
                     session_key=session_key,
                 ):
                     await _safe_send(event)
-
-                    # ── Pause on secrets_access ──────────────────
-                    if event.get("type") == "secrets_access":
-                        req_id = event.get("request_id", "")
-                        if req_id:
-                            gate = asyncio.Event()
-                            approval_gates[req_id] = gate
-                            try:
-                                await asyncio.wait_for(gate.wait(), timeout=_APPROVAL_TIMEOUT)
-                            except asyncio.TimeoutError:
-                                logger.warning("Approval timeout for %s — auto-denying", req_id)
-                                try:
-                                    await secrets_svc.resolve_access_request(
-                                        req_id,
-                                        SecretsAccessResolve(approved=False, reason="Timed out"),
-                                    )
-                                except Exception:
-                                    pass
-                                await _safe_send({
-                                    "type": "secrets_access_resolved",
-                                    "request_id": req_id,
-                                    "status": "denied",
-                                    "resolved": False,
-                                })
-                            finally:
-                                approval_gates.pop(req_id, None)
             except Exception as exc:
                 logger.exception("Streamer error for agent %s", agent_id)
                 await _safe_send({"type": "error", "content": str(exc)})
@@ -242,6 +179,3 @@ async def chat_ws(ws: WebSocket, agent_id: str):
     finally:
         receiver_task.cancel()
         streamer_task.cancel()
-        # Unblock any pending gates so the streamer doesn't hang
-        for gate in approval_gates.values():
-            gate.set()

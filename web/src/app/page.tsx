@@ -53,7 +53,7 @@ export default function DashboardPage() {
   const router = useRouter();
 
   const { data: status, isLoading: statusLoading } = useSWR<FullStatus>(
-    "/api/openclaw/status",
+    "/api/connection/status",
     fetcher,
     { refreshInterval: 15_000 },
   );
@@ -61,14 +61,14 @@ export default function DashboardPage() {
     refreshInterval: 10_000,
   });
   const { data: agentsData, isLoading: agentsLoading } =
-    useSWR<OpenClawAgentsList>("/api/openclaw/agents", fetcher);
+    useSWR<OpenClawAgentsList>("/api/connection/agents", fetcher);
   const { data: skillsData } = useSWR<SkillsStatusResponse>(
-    "/api/openclaw/skills",
+    "/api/connection/skills",
     fetcher,
   );
   const { data: templates } = useSWR<Template[]>("/api/templates/", fetcher);
   const { data: costing } = useSWR<CostingSummary>(
-    "/api/openclaw/costing",
+    "/api/connection/costing",
     () => lifecycleApi.costing(),
     { revalidateOnFocus: false },
   );

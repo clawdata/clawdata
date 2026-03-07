@@ -1,317 +1,282 @@
-"""Workspace SKILL.md management — scan, CRUD, symlink deploy."""
+"""Workspace skill management — project SKILL.md files.
+
+v2: Skills live in the ``skills/`` directory of each agent's workspace.
+The gateway WS protocol only supports standard workspace files (IDENTITY.md,
+SOUL.md, etc.), so skill files are read/written directly on the filesystem.
+"""
 
 from __future__ import annotations
 
-import json
 import logging
-import os
 import re
 import shutil
 from pathlib import Path
 
-from app.schemas.lifecycle import (
-    ActionResult,
-    WorkspaceSkill,
-    WorkspaceSkillsList,
-)
-
-from ._helpers import OPENCLAW_HOME, OPENCLAW_WORKSPACE
+from app.config import settings
+from app.services.lifecycle._helpers import resolve_agent_workspace
 
 logger = logging.getLogger(__name__)
 
-# Project skills dir (repo-level custom skills)
-_project_root = Path(__file__).resolve().parent.parent.parent.parent
-PROJECT_SKILLS_DIR = _project_root / "skills"
-
-MANAGED_SKILLS_DIR = OPENCLAW_HOME / "skills"
-
-
-def _parse_skill_md(
-    content: str,
-    slug: str,
-    location: str,
-    agent_id: str | None = None,
-    path: str = "",
-) -> WorkspaceSkill:
-    """Parse a SKILL.md file into a WorkspaceSkill."""
-    import yaml  # PyYAML
-
-    name = slug
-    description = ""
-    metadata: dict = {}
-
-    # Parse YAML frontmatter (---\n...\n---)
-    if content.startswith("---"):
-        parts = content.split("---", 2)
-        if len(parts) >= 3:
-            frontmatter_raw = parts[1]
-            try:
-                fm = yaml.safe_load(frontmatter_raw)
-                if isinstance(fm, dict):
-                    name = str(fm.get("name", slug))
-                    description = str(fm.get("description", "")).strip()
-                    raw_meta = fm.get("metadata")
-                    if isinstance(raw_meta, dict):
-                        metadata = raw_meta
-                    elif isinstance(raw_meta, str):
-                        try:
-                            metadata = json.loads(raw_meta)
-                        except (json.JSONDecodeError, ValueError):
-                            pass
-            except yaml.YAMLError:
-                # Fallback: best-effort line-by-line parse
-                for line in frontmatter_raw.strip().splitlines():
-                    line = line.strip()
-                    if line.startswith("name:"):
-                        name = line[5:].strip().strip('"').strip("'")
-                    elif line.startswith("description:"):
-                        description = line[12:].strip().strip('"').strip("'")
-
-    return WorkspaceSkill(
-        name=name,
-        slug=slug,
-        description=description,
-        metadata=metadata,
-        content=content,
-        location=location,
-        agent_id=agent_id,
-        path=path,
-    )
+_FENCE_RE = re.compile(
+    r"^`{3,}\s*skill\s*\n(.*?)\n`{3,}\s*$",
+    re.DOTALL | re.MULTILINE,
+)
 
 
-def _scan_skills_dir(
-    directory: Path, location: str, agent_id: str | None = None
-) -> list[WorkspaceSkill]:
-    """Scan a directory for skill folders containing SKILL.md."""
-    skills: list[WorkspaceSkill] = []
-    if not directory.is_dir():
-        return skills
-    for entry in sorted(directory.iterdir()):
+def _strip_skill_fence(content: str) -> str:
+    """Remove ```` ```skill ... ``` ```` code-fence wrapper if present.
+
+    Some project SKILL.md files wrap the entire body in a fenced code block
+    (e.g. `````skill … ````).  OpenClaw expects plain front-matter so we
+    strip the fence before writing to the workspace.
+    """
+    m = _FENCE_RE.search(content)
+    return m.group(1).strip() + "\n" if m else content
+
+
+def _parse_skill_md(content: str) -> dict:
+    """Extract metadata from a SKILL.md file."""
+    # Strip any code-fence wrapper first so headings are visible
+    clean = _strip_skill_fence(content)
+    meta: dict = {"content": clean}
+
+    # Try to extract name from first heading
+    for line in clean.splitlines():
+        line = line.strip()
+        if line.startswith("# "):
+            meta["name"] = line[2:].strip()
+            break
+
+    # Extract description from first paragraph after heading
+    lines = clean.splitlines()
+    in_desc = False
+    desc_lines = []
+    for line in lines:
+        if line.strip().startswith("# "):
+            in_desc = True
+            continue
+        if in_desc:
+            if line.strip() == "" and desc_lines:
+                break
+            if line.strip().startswith("#"):
+                break
+            if line.strip():
+                desc_lines.append(line.strip())
+    meta["description"] = " ".join(desc_lines) if desc_lines else ""
+
+    return meta
+
+
+def _scan_skills_dir(skills_dir: Path) -> list[dict]:
+    """Scan a directory for SKILL.md files and return metadata."""
+    if not skills_dir.is_dir():
+        return []
+
+    skills = []
+    for entry in sorted(skills_dir.iterdir()):
         if not entry.is_dir() or entry.name.startswith("."):
             continue
-        skill_file = entry / "SKILL.md"
-        if skill_file.is_file():
-            content = skill_file.read_text(encoding="utf-8", errors="replace")
-            ws = _parse_skill_md(
-                content,
-                slug=entry.name,
-                location=location,
-                agent_id=agent_id,
-                path=str(skill_file),
-            )
-            ws.is_symlink = entry.is_symlink()
-            skills.append(ws)
+        skill_md = entry / "SKILL.md"
+        if not skill_md.is_file():
+            continue
+
+        content = skill_md.read_text(errors="replace")
+        meta = _parse_skill_md(content)
+
+        skills.append({
+            "name": meta.get("name", entry.name),
+            "slug": entry.name,
+            "description": meta.get("description", ""),
+            "metadata": {},
+            "content": content,
+            "location": "project",
+            "agent_id": None,
+            "path": str(entry),
+            "is_symlink": False,
+        })
+
     return skills
 
 
-def list_project_skills() -> list[WorkspaceSkill]:
+def list_project_skills() -> list[dict]:
     """List project-level skills from the skills/ directory."""
-    return _scan_skills_dir(PROJECT_SKILLS_DIR, "project")
+    return _scan_skills_dir(settings.skills_dir)
 
 
-async def list_workspace_skills(agent_id: str) -> WorkspaceSkillsList:
-    """List workspace, project, and managed skills for an agent."""
-    from app.adapters.openclaw import openclaw
+async def list_workspace_skills(agent_id: str) -> dict:
+    """List skills visible to an agent: project skills + agent workspace skills.
 
-    await openclaw.connect()
-    files_raw = await openclaw.agent_files_list(agent_id)
-    workspace = files_raw.get("workspace", "")
-    ws_path = Path(os.path.expanduser(workspace)) if workspace else OPENCLAW_WORKSPACE
-    ws_skills_dir = ws_path / "skills"
+    Workspace skills are read directly from the agent's workspace/skills/
+    directory on disk (the gateway doesn't expose non-standard files via WS).
+    """
+    project = list_project_skills()
 
-    workspace_skills = _scan_skills_dir(ws_skills_dir, "workspace", agent_id)
-    project_skills = _scan_skills_dir(PROJECT_SKILLS_DIR, "project")
-    managed_skills = _scan_skills_dir(MANAGED_SKILLS_DIR, "managed")
+    # Scan agent workspace for custom skills
+    workspace_skills = []
+    try:
+        ws_path = await resolve_agent_workspace(agent_id)
+        skills_dir = ws_path / "skills"
+        if skills_dir.is_dir():
+            for entry in sorted(skills_dir.iterdir()):
+                if not entry.is_dir() or entry.name.startswith("."):
+                    continue
+                skill_md = entry / "SKILL.md"
+                if not skill_md.is_file():
+                    continue
+                content = skill_md.read_text(errors="replace")
+                meta = _parse_skill_md(content)
+                workspace_skills.append({
+                    "name": meta.get("name", entry.name),
+                    "slug": entry.name,
+                    "description": meta.get("description", ""),
+                    "metadata": {},
+                    "content": content,
+                    "location": "workspace",
+                    "agent_id": agent_id,
+                    "path": str(skill_md),
+                    "is_symlink": entry.is_symlink(),
+                })
+    except Exception as exc:
+        logger.warning("Failed to scan workspace skills for %s: %s", agent_id, exc)
 
-    return WorkspaceSkillsList(
-        workspace_skills=workspace_skills,
-        project_skills=project_skills,
-        managed_skills=managed_skills,
-    )
+    return {
+        "workspace_skills": workspace_skills,
+        "project_skills": project,
+        "managed_skills": [],
+    }
 
 
-async def get_workspace_skill(agent_id: str, slug: str) -> WorkspaceSkill:
-    """Get a specific workspace skill by slug."""
-    from app.adapters.openclaw import openclaw
+async def get_workspace_skill(agent_id: str, slug: str) -> dict:
+    """Get a specific skill by slug, checking workspace then project."""
+    # Check agent workspace first (filesystem)
+    try:
+        ws_path = await resolve_agent_workspace(agent_id)
+        skill_md = ws_path / "skills" / slug / "SKILL.md"
+        if skill_md.is_file():
+            content = skill_md.read_text(errors="replace")
+            meta = _parse_skill_md(content)
+            return {
+                "name": meta.get("name", slug),
+                "slug": slug,
+                "description": meta.get("description", ""),
+                "metadata": {},
+                "content": content,
+                "location": "workspace",
+                "agent_id": agent_id,
+                "path": str(skill_md),
+                "is_symlink": False,
+            }
+    except Exception:
+        pass
 
-    await openclaw.connect()
-    files_raw = await openclaw.agent_files_list(agent_id)
-    workspace = files_raw.get("workspace", "")
-    ws_path = Path(os.path.expanduser(workspace)) if workspace else OPENCLAW_WORKSPACE
-    skill_file = ws_path / "skills" / slug / "SKILL.md"
+    # Fall back to project skills
+    skill_dir = settings.skills_dir / slug
+    skill_md = skill_dir / "SKILL.md"
+    if skill_md.is_file():
+        content = skill_md.read_text(errors="replace")
+        meta = _parse_skill_md(content)
+        return {
+            "name": meta.get("name", slug),
+            "slug": slug,
+            "description": meta.get("description", ""),
+            "metadata": {},
+            "content": content,
+            "location": "project",
+            "agent_id": None,
+            "path": str(skill_dir),
+            "is_symlink": False,
+        }
 
-    if not skill_file.is_file():
-        raise FileNotFoundError(f"Skill '{slug}' not found in workspace")
-
-    content = skill_file.read_text(encoding="utf-8", errors="replace")
-    return _parse_skill_md(content, slug, "workspace", agent_id, str(skill_file))
+    raise FileNotFoundError(f"Skill '{slug}' not found")
 
 
 async def create_workspace_skill(
     agent_id: str,
+    *,
     name: str,
     description: str = "",
     instructions: str = "",
-    metadata: dict | None = None,
-) -> WorkspaceSkill:
-    """Create a new SKILL.md in the agent's workspace/skills/ directory."""
-    from app.adapters.openclaw import openclaw
+) -> dict:
+    """Create a new custom skill in the agent workspace (filesystem)."""
+    slug = re.sub(r"[^a-z0-9-]", "-", name.lower()).strip("-")
 
-    await openclaw.connect()
-    files_raw = await openclaw.agent_files_list(agent_id)
-    workspace = files_raw.get("workspace", "")
-    ws_path = Path(os.path.expanduser(workspace)) if workspace else OPENCLAW_WORKSPACE
+    content = f"# {name}\n\n"
+    if description:
+        content += f"{description}\n\n"
+    if instructions:
+        content += f"## Instructions\n\n{instructions}\n"
 
-    # Slugify the name
-    slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
-    if not slug:
-        slug = "custom-skill"
-
+    ws_path = await resolve_agent_workspace(agent_id)
     skill_dir = ws_path / "skills" / slug
     skill_dir.mkdir(parents=True, exist_ok=True)
-    skill_file = skill_dir / "SKILL.md"
+    (skill_dir / "SKILL.md").write_text(content)
 
-    # Build frontmatter
-    meta_json = json.dumps(metadata) if metadata else '{"openclaw": {"always": true}}'
-    content = f"""---
-name: {name}
-description: {description}
-metadata: {meta_json}
----
-
-# {name}
-
-{instructions or 'Add instructions here.'}
-"""
-
-    skill_file.write_text(content, encoding="utf-8")
-    return _parse_skill_md(content, slug, "workspace", agent_id, str(skill_file))
+    meta = _parse_skill_md(content)
+    return {
+        "name": meta.get("name", slug),
+        "slug": slug,
+        "description": meta.get("description", ""),
+        "metadata": {},
+        "content": content,
+        "location": "workspace",
+        "agent_id": agent_id,
+        "path": str(skill_dir / "SKILL.md"),
+        "is_symlink": False,
+    }
 
 
-async def update_workspace_skill(
-    agent_id: str, slug: str, content: str
-) -> WorkspaceSkill:
-    """Update SKILL.md content for a workspace skill."""
-    from app.adapters.openclaw import openclaw
+async def update_workspace_skill(agent_id: str, slug: str, content: str) -> dict:
+    """Update the SKILL.md content for a workspace skill (filesystem)."""
+    ws_path = await resolve_agent_workspace(agent_id)
+    skill_md = ws_path / "skills" / slug / "SKILL.md"
 
-    await openclaw.connect()
-    files_raw = await openclaw.agent_files_list(agent_id)
-    workspace = files_raw.get("workspace", "")
-    ws_path = Path(os.path.expanduser(workspace)) if workspace else OPENCLAW_WORKSPACE
-    skill_file = ws_path / "skills" / slug / "SKILL.md"
+    if not skill_md.parent.is_dir():
+        skill_md.parent.mkdir(parents=True, exist_ok=True)
+    skill_md.write_text(content)
 
-    if not skill_file.parent.is_dir():
-        raise FileNotFoundError(f"Skill '{slug}' not found in workspace")
+    meta = _parse_skill_md(content)
+    return {
+        "name": meta.get("name", slug),
+        "slug": slug,
+        "description": meta.get("description", ""),
+        "metadata": {},
+        "content": content,
+        "location": "workspace",
+        "agent_id": agent_id,
+        "path": str(skill_md),
+        "is_symlink": False,
+    }
 
-    skill_file.write_text(content, encoding="utf-8")
-    return _parse_skill_md(content, slug, "workspace", agent_id, str(skill_file))
 
-
-async def delete_workspace_skill(agent_id: str, slug: str) -> ActionResult:
-    """Delete a workspace skill directory."""
-    from app.adapters.openclaw import openclaw
-
-    await openclaw.connect()
-    files_raw = await openclaw.agent_files_list(agent_id)
-    workspace = files_raw.get("workspace", "")
-    ws_path = Path(os.path.expanduser(workspace)) if workspace else OPENCLAW_WORKSPACE
+async def delete_workspace_skill(agent_id: str, slug: str) -> dict:
+    """Delete a workspace skill by removing its directory from disk."""
+    ws_path = await resolve_agent_workspace(agent_id)
     skill_dir = ws_path / "skills" / slug
 
-    if not skill_dir.is_dir():
-        return ActionResult(success=False, message=f"Skill '{slug}' not found")
-
-    shutil.rmtree(skill_dir)
-    return ActionResult(success=True, message=f"Skill '{slug}' deleted")
+    if skill_dir.is_dir():
+        shutil.rmtree(skill_dir)
+    return {"success": True, "message": f"Skill '{slug}' deleted"}
 
 
-async def deploy_project_skill(agent_id: str, slug: str) -> ActionResult:
-    """Symlink a project skill into an agent's workspace/skills/ directory."""
-    from app.adapters.openclaw import openclaw
+async def deploy_project_skill(agent_id: str, slug: str) -> dict:
+    """Copy a project-level skill into the agent workspace (filesystem)."""
+    skill_dir = settings.skills_dir / slug
+    skill_md = skill_dir / "SKILL.md"
+    if not skill_md.is_file():
+        return {"success": False, "message": f"Project skill '{slug}' not found"}
 
-    src = PROJECT_SKILLS_DIR / slug
-    src_file = src / "SKILL.md"
-    if not src_file.is_file():
-        return ActionResult(
-            success=False, message=f"Project skill '{slug}' not found"
-        )
+    raw = skill_md.read_text(errors="replace")
+    # Strip code-fence wrapper so OpenClaw can parse the front-matter
+    content = _strip_skill_fence(raw)
 
-    await openclaw.connect()
-    files_raw = await openclaw.agent_files_list(agent_id)
-    workspace = files_raw.get("workspace", "")
-    ws_path = Path(os.path.expanduser(workspace)) if workspace else OPENCLAW_WORKSPACE
-    dest = ws_path / "skills" / slug
+    ws_path = await resolve_agent_workspace(agent_id)
+    target_dir = ws_path / "skills" / slug
+    target_dir.mkdir(parents=True, exist_ok=True)
+    (target_dir / "SKILL.md").write_text(content)
 
-    if dest.is_symlink():
-        if dest.resolve() == src.resolve():
-            return ActionResult(
-                success=True, message=f"Skill '{slug}' already linked"
-            )
-        dest.unlink()
-    elif dest.exists():
-        shutil.rmtree(dest)
-
-    ws_path_skills = ws_path / "skills"
-    ws_path_skills.mkdir(parents=True, exist_ok=True)
-    dest.symlink_to(src.resolve())
-
-    return ActionResult(
-        success=True, message=f"Skill '{slug}' linked for agent '{agent_id}'"
-    )
+    return {"success": True, "message": f"Skill '{slug}' deployed to agent workspace"}
 
 
-async def unlink_project_skill(agent_id: str, slug: str) -> ActionResult:
-    """Remove a symlinked project skill from an agent's workspace."""
-    from app.adapters.openclaw import openclaw
-
-    await openclaw.connect()
-    files_raw = await openclaw.agent_files_list(agent_id)
-    workspace = files_raw.get("workspace", "")
-    ws_path = Path(os.path.expanduser(workspace)) if workspace else OPENCLAW_WORKSPACE
-    link = ws_path / "skills" / slug
-
-    if not link.is_symlink():
-        if link.exists():
-            return ActionResult(
-                success=False,
-                message=f"Skill '{slug}' is agent-owned, not a symlink. Use delete instead.",
-            )
-        return ActionResult(
-            success=False, message=f"Skill '{slug}' not found in workspace"
-        )
-
-    link.unlink()
-    return ActionResult(
-        success=True,
-        message=f"Skill '{slug}' unlinked from agent '{agent_id}'",
-    )
-
-
-async def sync_workspace_skills(agent_id: str) -> list[str]:
-    """Return the list of workspace skill slugs for an agent.
-
-    OpenClaw automatically discovers SKILL.md files placed in the agent's
-    workspace/skills/ directory.  Returns list of workspace skill slugs
-    found on disk.
-    """
-    from app.adapters.openclaw import openclaw
-
-    await openclaw.connect()
-
-    disk_slugs: set[str] = set()
-    try:
-        files_raw = await openclaw.agent_files_list(agent_id)
-        workspace = files_raw.get("workspace", "")
-        ws_path = (
-            Path(os.path.expanduser(workspace)) if workspace else OPENCLAW_WORKSPACE
-        )
-        for s in _scan_skills_dir(ws_path / "skills", "workspace", agent_id):
-            disk_slugs.add(s.slug)
-    except Exception:
-        try:
-            userdata_ws = _project_root / "userdata" / "agents" / agent_id / "skills"
-            for s in _scan_skills_dir(userdata_ws, "workspace", agent_id):
-                disk_slugs.add(s.slug)
-        except Exception:
-            pass
-
-    return sorted(disk_slugs)
+async def unlink_project_skill(agent_id: str, slug: str) -> dict:
+    """Remove a deployed project skill from the agent workspace."""
+    return await delete_workspace_skill(agent_id, slug)

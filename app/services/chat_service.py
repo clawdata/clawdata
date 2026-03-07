@@ -106,8 +106,8 @@ _MAX_MEMORY_CONTEXT = 4000
 
 
 def _agent_workspace(agent_id: str) -> Path:
-    """Return the local workspace directory for an agent."""
-    return settings.userdata_dir / "agents" / agent_id
+    """Return the OpenClaw workspace directory for an agent."""
+    return settings.openclaw_agents_dir / agent_id
 
 
 def _has_filled_fields(content: str) -> bool:
@@ -469,10 +469,10 @@ def _get_skill_secrets(skill_name: str) -> list[dict[str, Any]] | None:
 
     # Search in main skills dir and any sub-agent skills dirs
     candidates = [settings.skills_dir / skill_name / "SKILL.md"]
-    # Also check userdata sub-agent skill dirs
-    userdata_agents = settings.userdata_dir / "agents"
-    if userdata_agents.exists():
-        for agent_dir in userdata_agents.iterdir():
+    # Also check per-agent skill dirs in OpenClaw home
+    oc_agents = settings.openclaw_agents_dir
+    if oc_agents.exists():
+        for agent_dir in oc_agents.iterdir():
             sub_skill = agent_dir / "skills" / skill_name / "SKILL.md"
             if sub_skill.exists():
                 candidates.append(sub_skill)
@@ -978,11 +978,11 @@ async def send_and_stream(
             if ev:
                 yield ev
 
-                # ── Secrets access detection ─────────────────────────
+                # ── Secrets detection ────────────────────────────────
                 # Once per run: check if the tool references a skill with
-                # MISSING secrets → emit skill_setup instead of approval.
-                # If secrets are present → emit a single secrets_access
-                # approval prompt.  Subsequent tools are silently allowed.
+                # MISSING secrets → emit skill_setup so the user can
+                # configure credentials.  If secrets are present the tool
+                # proceeds without interruption.
                 if not secrets_prompted_this_run and ev.get("type") == "tool_start":
                     tool_name = ev.get("content", "").split(":")[0].strip()
                     tool_args = (ev.get("metadata") or {}).get("args", {})
@@ -1005,50 +1005,7 @@ async def send_and_stream(
                                 "agent_id": agent_id,
                                 "run_id": run_id,
                             }
-                        else:
-                            # ── Secrets present → approval dialog ────
-                            import uuid as _uuid
-                            req_id = f"sa-{_uuid.uuid4().hex[:12]}"
-                            from app.schemas.secrets_manager import SecretRef, SecretSource
-                            from app.services import secrets_manager as _sm
-                            _ref_id = (
-                                secret_field.upper().replace(".", "_")
-                                if not secret_field.startswith("/")
-                                else secret_field
-                            )
-                            try:
-                                ref = SecretRef(
-                                    source=SecretSource.ENV,
-                                    provider="default",
-                                    id=_ref_id,
-                                )
-                            except Exception:
-                                ref = SecretRef(
-                                    source=SecretSource.ENV,
-                                    provider="default",
-                                    id="SECRET_VALUE",
-                                )
-                            await _sm.create_access_request(
-                                request_id=req_id,
-                                agent_id=agent_id,
-                                ref=ref,
-                                field=secret_field,
-                                reason=f"Tool '{tool_name}' needs access to a credential",
-                                session_key=session_key if isinstance(session_key, str) else None,
-                            )
-                            yield {
-                                "type": "secrets_access",
-                                "request_id": req_id,
-                                "agent_id": agent_id,
-                                "field": secret_field,
-                                "ref": {
-                                    "source": ref.source,
-                                    "provider": ref.provider,
-                                    "id": ref.id,
-                                },
-                                "reason": f"Tool '{tool_name}' needs access to a credential",
-                                "run_id": run_id,
-                            }
+                        # else: secrets present — let the tool proceed silently
 
                 # If lifecycle errored, also yield an explicit error event for the UI
                 if is_end and stream == "lifecycle" and data.get("phase") == "error":

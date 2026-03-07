@@ -25,32 +25,129 @@ export const fetcher = <T = unknown>(path: string) => api<T>(path);
 
 // ── Types ───────────────────────────────────────────────────────────
 
-// Agents
+// Agents (metadata overlay — gateway is source of truth)
 export interface Agent {
   id: string;
   name: string;
   description: string;
-  workspace_path: string;
-  agent_dir: string;
   model: string;
   role: "agent" | "orchestrator";
   parent_id: string | null;
-  source: "local" | "openclaw";
   emoji: string;
-  openclaw_workspace: string | null;
   is_active: boolean;
+  guardrail_policy_id: string | null;
+  tags: string[] | null;
   created_at: string;
   updated_at: string;
 }
 
-export interface AgentCreate {
+// Tasks
+export type TaskScheduleType = "cron" | "heartbeat";
+export type TaskStatus = "backlog" | "active" | "paused" | "completed";
+export type TaskSessionMode = "main" | "isolated";
+
+export interface Task {
+  id: string;
+  name: string;
+  description: string;
+  schedule_type: TaskScheduleType;
+  cron_expression: string | null;
+  heartbeat_interval: string | null;
+  timezone: string;
+  session_mode: TaskSessionMode;
+  message: string;
+  agent_id: string;
+  status: TaskStatus;
+  enabled: boolean;
+  model_override: string | null;
+  announce: boolean;
+  template_id: string | null;
+  active_hours: string | null;
+  delete_after_run: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TaskCreate {
   id: string;
   name: string;
   description?: string;
-  model?: string;
-  role?: "agent" | "orchestrator";
-  parent_id?: string;
-  emoji?: string;
+  schedule_type?: TaskScheduleType;
+  cron_expression?: string | null;
+  heartbeat_interval?: string | null;
+  timezone?: string;
+  session_mode?: TaskSessionMode;
+  message?: string;
+  agent_id?: string;
+  status?: TaskStatus;
+  enabled?: boolean;
+  model_override?: string | null;
+  announce?: boolean;
+  template_id?: string | null;
+  active_hours?: string | null;
+  delete_after_run?: boolean;
+}
+
+export interface TaskUpdate {
+  name?: string;
+  description?: string;
+  schedule_type?: TaskScheduleType;
+  cron_expression?: string | null;
+  heartbeat_interval?: string | null;
+  timezone?: string;
+  session_mode?: TaskSessionMode;
+  message?: string;
+  agent_id?: string;
+  status?: TaskStatus;
+  enabled?: boolean;
+  model_override?: string | null;
+  announce?: boolean;
+  template_id?: string | null;
+  active_hours?: string | null;
+  delete_after_run?: boolean;
+}
+
+export interface TaskTemplate {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  schedule_type: TaskScheduleType;
+  cron_expression: string | null;
+  heartbeat_interval: string | null;
+  session_mode: TaskSessionMode;
+  message: string;
+  announce: boolean;
+  category: string;
+}
+
+// Task runs
+export type TaskRunResult = "running" | "success" | "failed" | "skipped" | "timeout";
+export type TaskRunTrigger = "scheduled" | "manual" | "template";
+
+export interface TaskRun {
+  id: number;
+  task_id: string;
+  result: TaskRunResult;
+  summary: string;
+  output: string;
+  error: string | null;
+  duration_s: number | null;
+  tokens_used: number | null;
+  agent_id: string;
+  session_key: string | null;
+  trigger: TaskRunTrigger;
+  started_at: string;
+  finished_at: string | null;
+}
+
+export interface TaskDetail {
+  task: Task;
+  runs: TaskRun[];
+  total_runs: number;
+  success_count: number;
+  fail_count: number;
+  last_run: TaskRun | null;
 }
 
 // Skills
@@ -155,11 +252,16 @@ export interface FullStatus {
 
 export interface OnboardingStatus {
   config_exists: boolean;
+  config_valid: boolean;
   workspace_exists: boolean;
+  workspace_path: string;
+  sessions_ok: boolean;
   gateway_token_set: boolean;
   any_channel_configured: boolean;
   any_api_key_configured: boolean;
+  gateway_running: boolean;
   onboarded: boolean;
+  issues: string[];
 }
 
 export interface ActionResult {
@@ -407,7 +509,6 @@ export interface AgentDetail {
   model: string | null;
   is_default: boolean;
   workspace: string;
-  source: "local" | "openclaw";
   files: AgentFile[];
   skills: OpenClawSkill[];
   sessions: SessionEntry[];
@@ -426,20 +527,6 @@ export interface AppHealth {
 
 // ── API methods ─────────────────────────────────────────────────────
 
-// Agents
-export const agentApi = {
-  list: () => api<Agent[]>("/api/agents/"),
-  get: (id: string) => api<Agent>(`/api/agents/${id}`),
-  create: (data: AgentCreate) =>
-    api<Agent>("/api/agents/", { method: "POST", body: JSON.stringify(data) }),
-  update: (id: string, data: Partial<AgentCreate>) =>
-    api<Agent>(`/api/agents/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
-  delete: (id: string) =>
-    api<void>(`/api/agents/${id}`, { method: "DELETE" }),
-  openFolder: (id: string) =>
-    api<{ ok: boolean; path: string }>(`/api/agents/${id}/open-folder`, { method: "POST" }),
-};
-
 // Skills
 export const skillApi = {
   list: () => api<Skill[]>("/api/skills/"),
@@ -448,6 +535,23 @@ export const skillApi = {
     api<Skill>("/api/skills/", { method: "POST", body: JSON.stringify(data) }),
   delete: (id: string) =>
     api<void>(`/api/skills/${id}`, { method: "DELETE" }),
+};
+
+// Tasks
+export const taskApi = {
+  list: () => api<Task[]>("/api/tasks/"),
+  get: (id: string) => api<Task>(`/api/tasks/${id}`),
+  detail: (id: string) => api<TaskDetail>(`/api/tasks/${id}/detail`),
+  runs: (id: string, limit = 50) =>
+    api<TaskRun[]>(`/api/tasks/${id}/runs?limit=${limit}`),
+  create: (data: TaskCreate) =>
+    api<Task>("/api/tasks/", { method: "POST", body: JSON.stringify(data) }),
+  update: (id: string, data: TaskUpdate) =>
+    api<Task>(`/api/tasks/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  delete: (id: string) =>
+    api<void>(`/api/tasks/${id}`, { method: "DELETE" }),
+  templates: () => api<TaskTemplate[]>("/api/tasks/templates"),
+  template: (id: string) => api<TaskTemplate>(`/api/tasks/templates/${id}`),
 };
 
 export interface TemplateSyncResult {
@@ -507,152 +611,152 @@ export const templateApi = {
 
 // Lifecycle
 export const lifecycleApi = {
-  status: () => api<FullStatus>("/api/openclaw/status"),
-  onboarding: () => api<OnboardingStatus>("/api/openclaw/onboarding"),
+  status: () => api<FullStatus>("/api/connection/status"),
+  onboarding: () => api<OnboardingStatus>("/api/connection/onboarding"),
   install: (version = "latest", installDaemon = true) =>
-    api<InstallResult>("/api/openclaw/install", {
+    api<InstallResult>("/api/connection/install", {
       method: "POST",
       body: JSON.stringify({ version, install_daemon: installDaemon }),
     }),
   update: (channel = "stable") =>
-    api<ActionResult>("/api/openclaw/update", {
+    api<ActionResult>("/api/connection/update", {
       method: "POST",
       body: JSON.stringify({ channel }),
     }),
   uninstall: () =>
-    api<UninstallResult>("/api/openclaw/uninstall", { method: "POST" }),
+    api<UninstallResult>("/api/connection/uninstall", { method: "POST" }),
   start: (port = 18789) =>
-    api<ActionResult>("/api/openclaw/start", {
+    api<ActionResult>("/api/connection/start", {
       method: "POST",
       body: JSON.stringify({ port }),
     }),
-  stop: () => api<ActionResult>("/api/openclaw/stop", { method: "POST" }),
-  restart: () => api<ActionResult>("/api/openclaw/restart", { method: "POST" }),
-  health: () => api<HealthResult>("/api/openclaw/health"),
-  costing: () => api<CostingSummary>("/api/openclaw/costing"),
-  doctor: (fix = false) => api<DoctorResult>(`/api/openclaw/doctor?fix=${fix}`),
-  logs: (lines = 100) => api<{ lines: number; output: string }>(`/api/openclaw/logs?lines=${lines}`),
-  getConfig: () => api<ConfigResponse>("/api/openclaw/config"),
+  stop: () => api<ActionResult>("/api/connection/stop", { method: "POST" }),
+  restart: () => api<ActionResult>("/api/connection/restart", { method: "POST" }),
+  health: () => api<HealthResult>("/api/connection/health"),
+  costing: () => api<CostingSummary>("/api/connection/costing"),
+  doctor: (fix = false) => api<DoctorResult>(`/api/connection/doctor?fix=${fix}`),
+  logs: (lines = 100) => api<{ lines: number; output: string }>(`/api/connection/logs?lines=${lines}`),
+  getConfig: () => api<ConfigResponse>("/api/connection/config"),
   setConfig: (config: Record<string, unknown>) =>
-    api<ActionResult>("/api/openclaw/config", {
+    api<ActionResult>("/api/connection/config", {
       method: "PUT",
       body: JSON.stringify({ config }),
     }),
   patchConfig: (patch: Record<string, unknown>) =>
-    api<ActionResult>("/api/openclaw/config", {
+    api<ActionResult>("/api/connection/config", {
       method: "PATCH",
       body: JSON.stringify({ patch }),
     }),
   // Providers & API keys
-  providers: () => api<ProvidersResponse>("/api/openclaw/providers"),
-  listEnv: () => api<EnvListResponse>("/api/openclaw/env"),
+  providers: () => api<ProvidersResponse>("/api/connection/providers"),
+  listEnv: () => api<EnvListResponse>("/api/connection/env"),
   setEnv: (key: string, value: string) =>
-    api<ActionResult>("/api/openclaw/env", {
+    api<ActionResult>("/api/connection/env", {
       method: "PUT",
       body: JSON.stringify({ key, value }),
     }),
   deleteEnv: (key: string) =>
-    api<ActionResult>(`/api/openclaw/env/${key}`, { method: "DELETE" }),
+    api<ActionResult>(`/api/connection/env/${key}`, { method: "DELETE" }),
   // Models
-  modelsStatus: () => api<ModelsStatusResponse>("/api/openclaw/models/status"),
-  modelsCatalog: () => api<ModelCatalogResponse>("/api/openclaw/models/catalog"),
+  modelsStatus: () => api<ModelsStatusResponse>("/api/connection/models/status"),
+  modelsCatalog: () => api<ModelCatalogResponse>("/api/connection/models/catalog"),
   setModel: (model: string) =>
-    api<ActionResult>("/api/openclaw/models/set", {
+    api<ActionResult>("/api/connection/models/set", {
       method: "POST",
       body: JSON.stringify({ model }),
     }),
   // Setup wizard
   setup: (req?: SetupRequest) =>
-    api<SetupResult>("/api/openclaw/setup", {
+    api<SetupResult>("/api/connection/setup", {
       method: "POST",
       body: JSON.stringify(req ?? {}),
     }),
   // OpenClaw agents
-  agents: () => api<OpenClawAgentsList>("/api/openclaw/agents"),
+  agents: () => api<OpenClawAgentsList>("/api/connection/agents"),
   resetAgents: () =>
-    api<ActionResult>("/api/openclaw/agents/reset", { method: "POST" }),
+    api<ActionResult>("/api/connection/agents/reset", { method: "POST" }),
   createAgent: (payload: AgentCreatePayload) =>
-    api<ActionResult>("/api/openclaw/agents", {
+    api<ActionResult>("/api/connection/agents", {
       method: "POST",
       body: JSON.stringify(payload),
     }),
   updateAgent: (agentId: string, payload: AgentUpdatePayload) =>
-    api<ActionResult>(`/api/openclaw/agents/${agentId}`, {
+    api<ActionResult>(`/api/connection/agents/${agentId}`, {
       method: "PATCH",
       body: JSON.stringify(payload),
     }),
   deleteAgent: (agentId: string, deleteFiles = true) =>
-    api<ActionResult>(`/api/openclaw/agents/${agentId}?delete_files=${deleteFiles}`, {
+    api<ActionResult>(`/api/connection/agents/${agentId}?delete_files=${deleteFiles}`, {
       method: "DELETE",
     }),
   // OpenClaw skills
   skills: (agentId?: string) =>
     api<SkillsStatusResponse>(
-      agentId ? `/api/openclaw/skills?agent_id=${agentId}` : "/api/openclaw/skills"
+      agentId ? `/api/connection/skills?agent_id=${agentId}` : "/api/connection/skills"
     ),
   installSkill: (payload: SkillInstallPayload) =>
-    api<ActionResult>("/api/openclaw/skills/install", {
+    api<ActionResult>("/api/connection/skills/install", {
       method: "POST",
       body: JSON.stringify(payload),
     }),
   updateSkill: (skillKey: string, payload: SkillUpdatePayload) =>
-    api<ActionResult>(`/api/openclaw/skills/${skillKey}`, {
+    api<ActionResult>(`/api/connection/skills/${skillKey}`, {
       method: "PATCH",
       body: JSON.stringify(payload),
     }),
   // Agent detail, files & sessions
   agentDetail: (agentId: string) =>
-    api<AgentDetail>(`/api/openclaw/agents/${agentId}/detail`),
+    api<AgentDetail>(`/api/connection/agents/${agentId}/detail`),
   agentFiles: (agentId: string) =>
-    api<AgentFilesResponse>(`/api/openclaw/agents/${agentId}/files`),
+    api<AgentFilesResponse>(`/api/connection/agents/${agentId}/files`),
   agentFile: (agentId: string, name: string) =>
-    api<AgentFile>(`/api/openclaw/agents/${agentId}/files/${name}`),
+    api<AgentFile>(`/api/connection/agents/${agentId}/files/${name}`),
   setAgentFile: (agentId: string, name: string, content: string) =>
-    api<ActionResult>(`/api/openclaw/agents/${agentId}/files/${name}`, {
+    api<ActionResult>(`/api/connection/agents/${agentId}/files/${name}`, {
       method: "PUT",
       body: JSON.stringify({ content }),
     }),
   updateLinkedAgents: (agentId: string, linkedIds: string[]) =>
-    api<ActionResult>(`/api/openclaw/agents/${agentId}/linked-agents`, {
+    api<ActionResult>(`/api/connection/agents/${agentId}/linked-agents`, {
       method: "PUT",
       body: JSON.stringify({ linked_ids: linkedIds }),
     }),
   agentSessions: (agentId: string) =>
-    api<SessionsResponse>(`/api/openclaw/agents/${agentId}/sessions`),
+    api<SessionsResponse>(`/api/connection/agents/${agentId}/sessions`),
   resetSession: (key: string) =>
-    api<ActionResult>(`/api/openclaw/sessions/${key}/reset`, { method: "POST" }),
+    api<ActionResult>(`/api/connection/sessions/${key}/reset`, { method: "POST" }),
   deleteSession: (key: string) =>
-    api<ActionResult>(`/api/openclaw/sessions/${key}`, { method: "DELETE" }),
+    api<ActionResult>(`/api/connection/sessions/${key}`, { method: "DELETE" }),
   sessionHistory: (agentId: string, sessionId: string) =>
-    api<SessionHistoryResponse>(`/api/openclaw/agents/${agentId}/sessions/${sessionId}/history`),
+    api<SessionHistoryResponse>(`/api/connection/agents/${agentId}/sessions/${sessionId}/history`),
   // Workspace skills (SKILL.md)
   projectSkills: () =>
-    api<WorkspaceSkill[]>(`/api/openclaw/project-skills`),
+    api<WorkspaceSkill[]>(`/api/connection/project-skills`),
   workspaceSkills: (agentId: string) =>
-    api<WorkspaceSkillsList>(`/api/openclaw/agents/${agentId}/workspace-skills`),
+    api<WorkspaceSkillsList>(`/api/connection/agents/${agentId}/workspace-skills`),
   getWorkspaceSkill: (agentId: string, slug: string) =>
-    api<WorkspaceSkill>(`/api/openclaw/agents/${agentId}/workspace-skills/${slug}`),
+    api<WorkspaceSkill>(`/api/connection/agents/${agentId}/workspace-skills/${slug}`),
   createWorkspaceSkill: (agentId: string, payload: { name: string; description?: string; instructions?: string; metadata?: Record<string, unknown> }) =>
-    api<WorkspaceSkill>(`/api/openclaw/agents/${agentId}/workspace-skills`, {
+    api<WorkspaceSkill>(`/api/connection/agents/${agentId}/workspace-skills`, {
       method: "POST",
       body: JSON.stringify(payload),
     }),
   updateWorkspaceSkill: (agentId: string, slug: string, content: string) =>
-    api<WorkspaceSkill>(`/api/openclaw/agents/${agentId}/workspace-skills/${slug}`, {
+    api<WorkspaceSkill>(`/api/connection/agents/${agentId}/workspace-skills/${slug}`, {
       method: "PUT",
       body: JSON.stringify({ content }),
     }),
   deleteWorkspaceSkill: (agentId: string, slug: string) =>
-    api<ActionResult>(`/api/openclaw/agents/${agentId}/workspace-skills/${slug}`, {
+    api<ActionResult>(`/api/connection/agents/${agentId}/workspace-skills/${slug}`, {
       method: "DELETE",
     }),
   deployProjectSkill: (agentId: string, slug: string) =>
-    api<ActionResult>(`/api/openclaw/agents/${agentId}/workspace-skills/deploy`, {
+    api<ActionResult>(`/api/connection/agents/${agentId}/workspace-skills/deploy`, {
       method: "POST",
       body: JSON.stringify({ slug }),
     }),
   unlinkProjectSkill: (agentId: string, slug: string) =>
-    api<ActionResult>(`/api/openclaw/agents/${agentId}/workspace-skills/unlink`, {
+    api<ActionResult>(`/api/connection/agents/${agentId}/workspace-skills/unlink`, {
       method: "POST",
       body: JSON.stringify({ slug }),
     }),

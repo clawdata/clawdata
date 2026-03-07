@@ -8,7 +8,6 @@ import {
   LayoutDashboard,
   Bot,
   MessageSquare,
-  Puzzle,
   FileCode2,
   Settings,
   Shell,
@@ -24,6 +23,7 @@ import {
   SlidersHorizontal,
   DollarSign,
   Shield,
+  CalendarClock,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -48,7 +48,7 @@ const nav = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/agents", label: "Agents", icon: Bot },
   { href: "/chat", label: "Chat", icon: MessageSquare },
-  { href: "/skills", label: "Skills", icon: Puzzle },
+  { href: "/tasks", label: "Tasks", icon: CalendarClock },
   { href: "/templates", label: "Templates", icon: FileCode2 },
   { href: "/costing", label: "Costing", icon: DollarSign },
   { href: "/secrets", label: "Secrets", icon: Shield },
@@ -75,7 +75,7 @@ export function AppSidebar() {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const { data: status, mutate } = useSWR<FullStatus>(
-    "/api/openclaw/status",
+    "/api/connection/status",
     statusFetcher,
     { refreshInterval: 15000, revalidateOnFocus: false }
   );

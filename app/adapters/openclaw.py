@@ -160,6 +160,37 @@ def _resolve_gateway_token() -> str | None:
     return None
 
 
+async def _run_openclaw_cli(*args: str, timeout: float = 30) -> dict[str, Any]:
+    """Run an openclaw CLI command and return parsed JSON result."""
+    import shutil
+
+    oc = shutil.which("openclaw")
+    if not oc:
+        raise RuntimeError("openclaw CLI not found on PATH")
+
+    cmd = ["openclaw", *args, "--json"]
+    logger.info("Running openclaw CLI: %s", " ".join(cmd))
+
+    proc = await asyncio.create_subprocess_exec(
+        *cmd,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+        env=os.environ.copy(),
+    )
+    stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+    out = stdout.decode(errors="replace").strip()
+    err = stderr.decode(errors="replace").strip()
+
+    if proc.returncode != 0:
+        raise RuntimeError(f"openclaw CLI failed (exit {proc.returncode}): {err or out}")
+
+    # Try to parse JSON output
+    try:
+        return json.loads(out) if out else {"ok": True}
+    except json.JSONDecodeError:
+        return {"ok": True, "output": out}
+
+
 async def _auto_approve_device(request_id: str | None = None) -> bool:
     """Approve this device's pairing request via the CLI.
 
@@ -204,6 +235,70 @@ async def _auto_approve_device(request_id: str | None = None) -> bool:
         return False
 
 
+async def _kill_gateway() -> None:
+    """SIGKILL the OpenClaw gateway process.
+
+    We use SIGKILL (not SIGTERM) because the gateway may save its
+    in-memory state to ``openclaw.json`` on graceful shutdown, which
+    could overwrite config changes the CLI just made.
+    """
+    import signal
+
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "lsof", "-ti:18789",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=5)
+        pids = stdout.decode().strip().split()
+        for pid in pids:
+            try:
+                os.kill(int(pid), signal.SIGKILL)
+            except (ProcessLookupError, ValueError):
+                pass
+    except Exception:
+        pass
+
+    await asyncio.sleep(1)
+
+
+async def _start_gateway() -> None:
+    """Start a fresh gateway and poll until it is ready (up to 15 s)."""
+    import shutil
+    import socket
+
+    oc = shutil.which("openclaw")
+    if not oc:
+        logger.warning("Cannot start gateway: openclaw not on PATH")
+        return
+
+    await asyncio.create_subprocess_exec(
+        oc, "gateway",
+        stdout=asyncio.subprocess.DEVNULL,
+        stderr=asyncio.subprocess.DEVNULL,
+        start_new_session=True,
+    )
+
+    for _tick in range(30):
+        await asyncio.sleep(0.5)
+        try:
+            with socket.create_connection(("127.0.0.1", 18789), timeout=1):
+                break
+        except OSError:
+            continue
+    else:
+        logger.warning("Gateway did not become ready within 15 s")
+
+    logger.info("Gateway started")
+
+
+async def _restart_gateway() -> None:
+    """Kill + start the gateway (convenience wrapper)."""
+    await _kill_gateway()
+    await _start_gateway()
+
+
 class OpenClawAdapter(AIBackendAdapter):
     """WebSocket client for the OpenClaw Gateway."""
 
@@ -215,6 +310,48 @@ class OpenClawAdapter(AIBackendAdapter):
         self._connected = False
 
     # ── Connection lifecycle ─────────────────────────────────────────
+
+    async def _disconnect(self) -> None:
+        """Tear down the WS connection without touching the OS process."""
+        if self._ws:
+            try:
+                await self._ws.close()
+            except Exception:
+                pass
+            self._ws = None
+        self._connected = False
+
+    async def _restart_and_reconnect(self) -> None:
+        """Restart the gateway daemon and reconnect the WS client.
+
+        Called after config-mutating CLI commands (agent create/delete/reset)
+        so the gateway picks up the changed ``openclaw.json``.
+        """
+        await self._disconnect()
+
+        # Restart the OS-level gateway process
+        await _restart_gateway()
+
+        # Re-establish the WS handshake
+        await self.connect()
+
+    async def _stop_gateway_and_disconnect(self) -> None:
+        """Kill the gateway and disconnect WS.
+
+        Used *before* running config-mutating CLI commands so the
+        gateway cannot overwrite ``openclaw.json`` while the CLI
+        is modifying it.
+        """
+        await self._disconnect()
+        await _kill_gateway()
+
+    async def _start_gateway_and_reconnect(self) -> None:
+        """Start a fresh gateway and reconnect WS.
+
+        Used *after* config-mutating CLI commands have finished.
+        """
+        await _start_gateway()
+        await self.connect()
 
     async def connect(self) -> None:
         if self._connected and self._ws and self._listener_task and not self._listener_task.done():
@@ -514,55 +651,109 @@ class OpenClawAdapter(AIBackendAdapter):
     async def get_health(self) -> dict[str, Any]:
         return await self._request("health")
 
-    # ── Agents management ────────────────────────────────────────────
+    # ── Agents ────────────────────────────────────────────────────────
 
     async def list_agents(self) -> dict[str, Any]:
         """Call agents.list on the gateway."""
         return await self._request("agents.list", {})
 
-    async def create_agent(
-        self, *, name: str, workspace: str, emoji: str | None = None, avatar: str | None = None
-    ) -> dict[str, Any]:
-        params: dict[str, Any] = {"name": name, "workspace": workspace}
-        if emoji:
-            params["emoji"] = emoji
-        if avatar:
-            params["avatar"] = avatar
-        return await self._request("agents.create", params)
+    async def create_agent(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Create a new agent via the openclaw CLI.
 
-    async def update_agent(
-        self, *, agent_id: str, name: str | None = None, model: str | None = None,
-        workspace: str | None = None, avatar: str | None = None
-    ) -> dict[str, Any]:
-        params: dict[str, Any] = {"agentId": agent_id}
-        if name is not None:
-            params["name"] = name
-        if model is not None:
-            params["model"] = model
-        if workspace is not None:
-            params["workspace"] = workspace
-        if avatar is not None:
-            params["avatar"] = avatar
-        return await self._request("agents.update", params)
+        Stops the gateway first so the CLI writes directly to
+        ``openclaw.json`` without the gateway overwriting it.
+        """
+        agent_id = payload.get("id", payload.get("name", "")).lower().replace(" ", "-")
 
-    async def delete_agent(
-        self, agent_id: str, *, delete_files: bool = True
-    ) -> dict[str, Any]:
-        return await self._request(
-            "agents.delete", {"agentId": agent_id, "deleteFiles": delete_files}
-        )
+        # Stop gateway so CLI can safely mutate config
+        await self._stop_gateway_and_disconnect()
 
-    # ── Agent files management ───────────────────────────────────────
+        try:
+            result = await _run_openclaw_cli(
+                "agents", "add", agent_id,
+                "--non-interactive",
+                "--workspace", str(Path.home() / ".openclaw" / "agents" / agent_id),
+                *(["--model", payload["model"]] if payload.get("model") else []),
+            )
+            # Set display name / emoji if provided
+            display_name = payload.get("name", "")
+            emoji = payload.get("emoji", "")
+            if display_name or emoji:
+                identity_args: list[str] = ["agents", "set-identity", "--agent", agent_id]
+                if display_name:
+                    identity_args.extend(["--name", display_name])
+                if emoji:
+                    identity_args.extend(["--emoji", emoji])
+                await _run_openclaw_cli(*identity_args)
+        finally:
+            # Always restart gateway, even if CLI failed
+            await self._start_gateway_and_reconnect()
 
-    async def agent_files_list(self, agent_id: str) -> dict[str, Any]:
+        return result
+
+    async def update_agent(self, agent_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        """Update agent identity (name, emoji) via the openclaw CLI."""
+        args: list[str] = ["agents", "set-identity", "--agent", agent_id]
+        if payload.get("name"):
+            args.extend(["--name", payload["name"]])
+        if payload.get("emoji"):
+            args.extend(["--emoji", payload["emoji"]])
+        return await _run_openclaw_cli(*args)
+
+    async def delete_agent(self, agent_id: str, *, delete_files: bool = True) -> dict[str, Any]:
+        """Delete an agent via the openclaw CLI.
+
+        Stops the gateway first so the CLI can safely mutate config.
+        """
+        await self._stop_gateway_and_disconnect()
+        try:
+            result = await _run_openclaw_cli("agents", "delete", agent_id, "--force")
+        finally:
+            await self._start_gateway_and_reconnect()
+        return result
+
+    async def reset_agents(self) -> dict[str, Any]:
+        """Reset all agents — delete non-main agents, then restart gateway."""
+        # Grab agent list BEFORE stopping the gateway
+        agents_data = await self.list_agents()
+        main_key = agents_data.get("mainKey", "main")
+
+        await self._stop_gateway_and_disconnect()
+        try:
+            errors = []
+            for a in agents_data.get("agents", []):
+                if a.get("id") != main_key:
+                    try:
+                        await _run_openclaw_cli("agents", "delete", a["id"], "--force")
+                    except Exception as exc:
+                        errors.append(f"{a['id']}: {exc}")
+        finally:
+            await self._start_gateway_and_reconnect()
+
+        if errors:
+            return {"ok": False, "errors": errors}
+        return {"ok": True}
+
+    # ── Agent files ──────────────────────────────────────────────────
+
+    async def get_agent_files(self, agent_id: str) -> dict[str, Any]:
         """List all workspace files for an agent."""
         return await self._request("agents.files.list", {"agentId": agent_id})
 
-    async def agent_files_get(self, agent_id: str, name: str) -> dict[str, Any]:
-        """Get a workspace file's content."""
-        return await self._request("agents.files.get", {"agentId": agent_id, "name": name})
+    async def read_agent_file(self, agent_id: str, name: str) -> dict[str, Any]:
+        """Get a workspace file's content.
 
-    async def agent_files_set(self, agent_id: str, name: str, content: str) -> dict[str, Any]:
+        Gateway returns ``{agentId, workspace, file: {name, content, ...}}``.
+        We unwrap and return the inner ``file`` dict directly so callers
+        can do ``result.get("content")`` without knowing about the wrapper.
+        """
+        result = await self._request("agents.files.get", {"agentId": agent_id, "name": name})
+        # Unwrap the nested file object
+        if "file" in result and isinstance(result["file"], dict):
+            return result["file"]
+        return result
+
+    async def write_agent_file(self, agent_id: str, name: str, content: str) -> dict[str, Any]:
         """Write content to a workspace file."""
         return await self._request("agents.files.set", {"agentId": agent_id, "name": name, "content": content})
 
@@ -594,66 +785,6 @@ class OpenClawAdapter(AIBackendAdapter):
 
     async def sessions_compact(self, key: str) -> dict[str, Any]:
         return await self._request("sessions.compact", {"key": key})
-
-    # ── Config management ────────────────────────────────────────────
-
-    async def config_get(self) -> dict[str, Any]:
-        """Get the full OpenClaw config."""
-        return await self._request("config.get", {})
-
-    async def config_patch(self, raw: str, *, note: str = "") -> dict[str, Any]:
-        """Patch the OpenClaw config with a raw JSON string.
-
-        Automatically fetches the base hash required by the gateway.
-        """
-        # Gateway requires baseHash for config.patch — fetch it first
-        current = await self._request("config.get", {})
-        base_hash = current.get("hash", "")
-
-        params: dict[str, Any] = {"raw": raw, "baseHash": base_hash}
-        if note:
-            params["note"] = note
-        return await self._request("config.patch", params)
-
-    # ── Skills management ────────────────────────────────────────────
-
-    async def skills_status(self, agent_id: str | None = None) -> dict[str, Any]:
-        """Call skills.status on the gateway."""
-        params: dict[str, Any] = {}
-        if agent_id:
-            params["agentId"] = agent_id
-        return await self._request("skills.status", params)
-
-    async def skills_bins(self) -> dict[str, Any]:
-        """Call skills.bins to get available skill binaries."""
-        return await self._request("skills.bins", {})
-
-    async def skills_install(
-        self, *, name: str, install_id: str, timeout_ms: int | None = None
-    ) -> dict[str, Any]:
-        """Install a skill binary."""
-        params: dict[str, Any] = {"name": name, "installId": install_id}
-        if timeout_ms is not None:
-            params["timeoutMs"] = timeout_ms
-        return await self._request("skills.install", params)
-
-    async def skills_update(
-        self,
-        *,
-        skill_key: str,
-        enabled: bool | None = None,
-        api_key: str | None = None,
-        env: dict[str, str] | None = None,
-    ) -> dict[str, Any]:
-        """Update a skill (enable/disable, set API key or env vars)."""
-        params: dict[str, Any] = {"skillKey": skill_key}
-        if enabled is not None:
-            params["enabled"] = enabled
-        if api_key is not None:
-            params["apiKey"] = api_key
-        if env is not None:
-            params["env"] = env
-        return await self._request("skills.update", params)
 
     # ── Costing ──────────────────────────────────────────────────────
 

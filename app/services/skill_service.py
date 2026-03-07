@@ -35,7 +35,7 @@ async def get_skill(db: AsyncSession, skill_id: str) -> tuple[Skill | None, str 
 async def create_skill(db: AsyncSession, data: SkillCreate) -> Skill:
     # Decide placement: shared or per-agent
     if data.agent_id:
-        base = settings.userdata_dir / "sub" / data.agent_id / "skills"
+        base = settings.openclaw_agents_dir / data.agent_id / "skills"
     else:
         base = settings.skills_dir
 

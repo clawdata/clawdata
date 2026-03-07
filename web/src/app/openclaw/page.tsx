@@ -55,23 +55,23 @@ function ControlsPanel({
     data: status,
     mutate: refreshStatus,
     isLoading,
-  } = useSWR<FullStatus>("/api/openclaw/status", fetcher, {
+  } = useSWR<FullStatus>("/api/connection/status", fetcher, {
     refreshInterval: 10000,
   });
   const { data: onboarding } = useSWR<OnboardingStatus>(
-    "/api/openclaw/onboarding",
+    "/api/connection/onboarding",
     fetcher
   );
   const { data: config, mutate: refreshConfig } = useSWR<ConfigResponse>(
-    "/api/openclaw/config",
+    "/api/connection/config",
     fetcher
   );
   const { data: providers } = useSWR<ProvidersResponse>(
-    "/api/openclaw/providers",
+    "/api/connection/providers",
     fetcher,
   );
   const { data: envKeys } = useSWR<EnvListResponse>(
-    "/api/openclaw/env",
+    "/api/connection/env",
     fetcher,
   );
 
@@ -255,9 +255,10 @@ function ControlsPanel({
             {onboarding ? (
               <>
                 {[
-                  { l: "Config exists", ok: onboarding.config_exists },
+                  { l: "Config valid", ok: onboarding.config_valid },
                   { l: "Workspace exists", ok: onboarding.workspace_exists },
-                  { l: "Gateway token", ok: onboarding.gateway_token_set },
+                  { l: "Sessions OK", ok: onboarding.sessions_ok },
+                  { l: "Gateway running", ok: onboarding.gateway_running },
                   { l: "API key configured", ok: onboarding.any_api_key_configured },
                 ].map(({ l, ok }) => (
                   <div key={l} className="flex items-center gap-2">
@@ -265,6 +266,18 @@ function ControlsPanel({
                     <span>{l}</span>
                   </div>
                 ))}
+                {onboarding.workspace_path && (
+                  <div className="text-xs text-muted-foreground font-mono truncate" title={onboarding.workspace_path}>
+                    Workspace: {onboarding.workspace_path}
+                  </div>
+                )}
+                {onboarding.issues?.length > 0 && (
+                  <div className="space-y-1 mt-1">
+                    {onboarding.issues.map((issue, i) => (
+                      <div key={i} className="text-xs text-destructive">{issue}</div>
+                    ))}
+                  </div>
+                )}
                 <Separator />
                 <Badge
                   variant={onboarding.onboarded ? "default" : "destructive"}
@@ -595,11 +608,11 @@ function InstallBanner({ onSetup }: { onSetup: () => void }) {
 
 export default function OpenClawPage() {
   const { data: onboarding } = useSWR<OnboardingStatus>(
-    "/api/openclaw/onboarding",
+    "/api/connection/onboarding",
     fetcher,
   );
   const { data: status, mutate: refreshStatus } = useSWR<FullStatus>(
-    "/api/openclaw/status",
+    "/api/connection/status",
     fetcher,
     { refreshInterval: 10_000 },
   );

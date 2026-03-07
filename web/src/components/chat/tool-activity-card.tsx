@@ -98,12 +98,66 @@ function tryParseResultData(
   if (!result) return null;
   try {
     const parsed = JSON.parse(result);
+
+    // Direct array of objects — most common
     if (Array.isArray(parsed) && parsed.length > 0 && typeof parsed[0] === "object") {
       return parsed as Record<string, unknown>[];
+    }
+
+    // Wrapper object — look for a nested array (e.g. {data: [...], state: ...})
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      for (const key of ["data", "rows", "results", "records", "items"]) {
+        const nested = (parsed as Record<string, unknown>)[key];
+        if (Array.isArray(nested) && nested.length > 0) {
+          // Array of objects → use directly
+          if (typeof nested[0] === "object" && !Array.isArray(nested[0])) {
+            return nested as Record<string, unknown>[];
+          }
+          // Array of arrays (e.g. Databricks data_array) — try to pair with column names
+          if (Array.isArray(nested[0])) {
+            const columns = tryExtractColumns(parsed as Record<string, unknown>);
+            if (columns && columns.length === (nested[0] as unknown[]).length) {
+              return (nested as unknown[][]).map((row) => {
+                const obj: Record<string, unknown> = {};
+                columns.forEach((col, i) => {
+                  const val = row[i];
+                  const num = typeof val === "string" ? Number(val) : NaN;
+                  obj[col] = !isNaN(num) && val !== "" ? num : val;
+                });
+                return obj;
+              });
+            }
+          }
+        }
+      }
     }
   } catch {
     // Not JSON — try parsing markdown table
     return parseMarkdownTable(result);
+  }
+  return null;
+}
+
+/** Try to extract column names from a Databricks-style response */
+function tryExtractColumns(obj: Record<string, unknown>): string[] | null {
+  // Databricks format: .manifest.schema.columns[].name
+  const manifest = obj.manifest as Record<string, unknown> | undefined;
+  if (manifest) {
+    const schema = manifest.schema as Record<string, unknown> | undefined;
+    if (schema) {
+      const cols = schema.columns as Array<Record<string, unknown>> | undefined;
+      if (Array.isArray(cols)) {
+        const names = cols.map((c) => String(c.name || c.column_name || ""));
+        if (names.every(Boolean)) return names;
+      }
+    }
+  }
+  // Generic: look for a "columns" or "headers" array of strings
+  for (const key of ["columns", "headers", "fields", "column_names"]) {
+    const arr = obj[key];
+    if (Array.isArray(arr) && arr.length > 0 && typeof arr[0] === "string") {
+      return arr as string[];
+    }
   }
   return null;
 }

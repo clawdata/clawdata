@@ -9,14 +9,12 @@ services:
       - "18789:18789"  # OpenClaw gateway
     volumes:
       - clawdata-db:/app/data        # SQLite persistence
-      - clawdata-userdata:/app/userdata  # Agent memory & config
       - clawdata-openclaw:/root/.openclaw  # OpenClaw config & state
     env_file:
       - .env
     environment:
       - CLAWDATA_DATABASE_URL=sqlite+aiosqlite:///./data/clawdata.db
-      - CLAWDATA_OPENCLAW_GATEWAY_HOST=0.0.0.0
-      - CLAWDATA_OPENCLAW_AUTO_INSTALL=true
+      - CLAWDATA_OPENCLAW_GATEWAY_HOST=host.docker.internal
     restart: unless-stopped
 
   # ── Frontend (Next.js) ───────────────────────────────────────────
@@ -35,5 +33,4 @@ services:
 
 volumes:
   clawdata-db:
-  clawdata-userdata:
   clawdata-openclaw:

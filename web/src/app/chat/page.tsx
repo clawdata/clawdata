@@ -43,11 +43,11 @@ import { SetupWizardDialog } from "@/components/openclaw/setup-wizard-dialog";
 
 export default function ChatPage() {
   const { data: agentsData } = useSWR<OpenClawAgentsList>(
-    "/api/openclaw/agents",
+    "/api/connection/agents",
     fetcher,
   );
   const { data: onboarding } = useSWR<OnboardingStatus>(
-    "/api/openclaw/onboarding",
+    "/api/connection/onboarding",
     fetcher,
     { refreshInterval: 10_000 },
   );
@@ -263,7 +263,6 @@ export default function ChatPage() {
                         message={msg}
                         agent={currentAgent}
                         agents={agents}
-                        onResolveSecretsAccess={chat.resolveSecretsAccess}
                         onStoreSecret={chat.storeSecret}
                         onRejectSecret={chat.rejectSecret}
                       />,

@@ -6,16 +6,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.schemas.skill import SkillCreate, SkillResponse, SkillUpdate
 from app.services import skill_service
-from app.services.agent_service import sync_all_project_skills
 
 router = APIRouter()
-
-
-@router.post("/sync")
-async def sync_skills():
-    """Sync project-level skills into all agent workspaces (symlinks)."""
-    result = sync_all_project_skills()
-    return {"synced": result}
 
 
 @router.get("/", response_model=list[SkillResponse])

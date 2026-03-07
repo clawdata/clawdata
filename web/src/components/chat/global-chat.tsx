@@ -53,7 +53,7 @@ export function GlobalChatSlideOver() {
   const [input, setInput] = useState("");
 
   const { data: agentsData } = useSWR<OpenClawAgentsList>(
-    "/api/openclaw/agents",
+    "/api/connection/agents",
     fetcher,
   );
   const agents = agentsData?.agents;
@@ -218,7 +218,6 @@ export function GlobalChatSlideOver() {
                   message={msg}
                   agent={currentAgent}
                   agents={agents}
-                  onResolveSecretsAccess={chat.resolveSecretsAccess}
                 />
               ))}
               {chat.thinking &&

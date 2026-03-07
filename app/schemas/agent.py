@@ -13,6 +13,8 @@ class AgentCreate(BaseModel):
     role: str = Field("agent", pattern=r"^(agent|orchestrator)$")
     parent_id: str | None = None
     emoji: str = ""
+    guardrail_policy_id: str | None = None
+    tags: list[str] | None = None
 
 
 class AgentUpdate(BaseModel):
@@ -22,21 +24,21 @@ class AgentUpdate(BaseModel):
     role: str | None = None
     emoji: str | None = None
     is_active: bool | None = None
+    guardrail_policy_id: str | None = None
+    tags: list[str] | None = None
 
 
 class AgentResponse(BaseModel):
     id: str
     name: str
     description: str
-    workspace_path: str
-    agent_dir: str
     model: str
     role: str
     parent_id: str | None
-    source: str
     emoji: str
-    openclaw_workspace: str | None
     is_active: bool
+    guardrail_policy_id: str | None
+    tags: dict | None
     created_at: datetime
     updated_at: datetime
 
