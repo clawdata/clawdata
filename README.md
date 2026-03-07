@@ -4,7 +4,7 @@
   <img src="web/public/assets/shell.svg" alt="ClawData" width="120" />
 </p>
 
-An easy-to-use dashboard and FastAPI backend for managing [OpenClaw](https://docs.openclaw.ai/) agents built for data teams. Spin up agents that understand your pipelines, query your warehouses, generate dbt models, review SQL, and more — all from one UI instead of the command line. Built for data engineers and analysts who want AI assistance without leaving their stack.
+An easy-to-use dashboard, CLI, and FastAPI backend for managing [OpenClaw](https://docs.openclaw.ai/) agents built for data teams. Spin up agents that understand your pipelines, query your warehouses, generate dbt models, review SQL, and more — from the web UI or the terminal. Built for data engineers and analysts who want AI assistance without leaving their stack.
 
 ## Screenshots
 
@@ -86,20 +86,44 @@ npm run dev
 # Open http://localhost:3000
 ```
 
-### TUI (Terminal UI)
+### CLI
 
-Connect directly to the OpenClaw gateway from your terminal:
+ClawData includes an interactive CLI for managing agents and skills without the web UI:
 
 ```bash
-./start-tui.sh
+# Launch the interactive menu
+clawdata
+
+# Or jump straight to a section
+clawdata skills       # Toggle skills on/off per agent (↑↓ navigate, Space toggle, Enter confirm)
+clawdata agents       # Browse, create, and configure agents
+clawdata gateway      # Gateway health, logs, models, and providers
+clawdata templates    # Browse project templates
+clawdata status       # Quick system overview
+clawdata setup        # Guided setup wizard
+clawdata tui          # Launch the OpenClaw TUI
 ```
 
-The script auto-detects the gateway token, starts the gateway if needed, handles device pairing, and opens a fresh chat session. Pass extra flags as needed:
+Skill management uses an interactive checklist — arrow keys to move, space bar to toggle, enter to apply:
+
+```
+  Skills for 🦞 main  (↑↓ navigate, Space toggle, Enter confirm)
+> [x] Azure
+  [ ] BigQuery
+  [x] Data Analysis
+  [x] Databricks Skill
+  [ ] dbt
+  [ ] DuckDB
+  ...
+```
+
+All commands also have non-interactive variants for scripting:
 
 ```bash
-./start-tui.sh --session main       # Rejoin the default session
-./start-tui.sh --deliver            # Deliver replies to linked channels
-./start-tui.sh --message "hello"    # Send an initial message on connect
+clawdata skills list --project
+clawdata skills deploy dbt --agent main
+clawdata agents list --gateway
+clawdata gateway health
 ```
 
 ## API Docs
@@ -117,6 +141,7 @@ See [PLAN.md](PLAN.md) for the full implementation plan.
 | Directory | Purpose |
 |-----------|---------|
 | `app/` | FastAPI application (routers, services, adapters) |
+| `app/cli/` | Interactive CLI (`clawdata` command) |
 | `templates/` | Jinja2 reference templates (dbt, airflow, sql) |
 | `skills/` | Agent skill definitions (SKILL.md markdown) |
 | `userdata/` | Agent workspaces (head agent + sub-agents) |
