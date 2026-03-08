@@ -17,6 +17,8 @@ export async function api<T = unknown>(
     const body = await res.text();
     throw new Error(`API ${res.status}: ${body}`);
   }
+  // 204 No Content — nothing to parse
+  if (res.status === 204) return undefined as T;
   return res.json();
 }
 
@@ -436,22 +438,6 @@ export interface OpenClawSkill {
   install: SkillInstallOption[];
 }
 
-export interface SkillsStatusResponse {
-  skills: OpenClawSkill[];
-}
-
-export interface SkillInstallPayload {
-  name: string;
-  install_id: string;
-  timeout_ms?: number;
-}
-
-export interface SkillUpdatePayload {
-  enabled?: boolean;
-  api_key?: string;
-  env?: Record<string, string>;
-}
-
 // Agent detail/files/sessions
 export interface AgentFile {
   name: string;
@@ -514,6 +500,20 @@ export interface AgentDetail {
   sessions: SessionEntry[];
 }
 
+export interface MemoryEntry {
+  date: string;
+  filename: string;
+  content: string;
+  size: number;
+  modified_at: number | null;
+}
+
+export interface AgentMemoryResponse {
+  agent_id: string;
+  count: number;
+  entries: MemoryEntry[];
+}
+
 // Health
 export interface AppHealth {
   status: string;
@@ -526,16 +526,6 @@ export interface AppHealth {
 }
 
 // ── API methods ─────────────────────────────────────────────────────
-
-// Skills
-export const skillApi = {
-  list: () => api<Skill[]>("/api/skills/"),
-  get: (id: string) => api<Skill>(`/api/skills/${id}`),
-  create: (data: SkillCreate) =>
-    api<Skill>("/api/skills/", { method: "POST", body: JSON.stringify(data) }),
-  delete: (id: string) =>
-    api<void>(`/api/skills/${id}`, { method: "DELETE" }),
-};
 
 // Tasks
 export const taskApi = {
@@ -550,6 +540,8 @@ export const taskApi = {
     api<Task>(`/api/tasks/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
   delete: (id: string) =>
     api<void>(`/api/tasks/${id}`, { method: "DELETE" }),
+  execute: (id: string) =>
+    api<TaskRun>(`/api/tasks/${id}/execute`, { method: "POST" }),
   templates: () => api<TaskTemplate[]>("/api/tasks/templates"),
   template: (id: string) => api<TaskTemplate>(`/api/tasks/templates/${id}`),
 };
@@ -689,26 +681,13 @@ export const lifecycleApi = {
     api<ActionResult>(`/api/connection/agents/${agentId}?delete_files=${deleteFiles}`, {
       method: "DELETE",
     }),
-  // OpenClaw skills
-  skills: (agentId?: string) =>
-    api<SkillsStatusResponse>(
-      agentId ? `/api/connection/skills?agent_id=${agentId}` : "/api/connection/skills"
-    ),
-  installSkill: (payload: SkillInstallPayload) =>
-    api<ActionResult>("/api/connection/skills/install", {
-      method: "POST",
-      body: JSON.stringify(payload),
-    }),
-  updateSkill: (skillKey: string, payload: SkillUpdatePayload) =>
-    api<ActionResult>(`/api/connection/skills/${skillKey}`, {
-      method: "PATCH",
-      body: JSON.stringify(payload),
-    }),
   // Agent detail, files & sessions
   agentDetail: (agentId: string) =>
     api<AgentDetail>(`/api/connection/agents/${agentId}/detail`),
   agentFiles: (agentId: string) =>
     api<AgentFilesResponse>(`/api/connection/agents/${agentId}/files`),
+  agentMemory: (agentId: string) =>
+    api<AgentMemoryResponse>(`/api/connection/agents/${agentId}/memory`),
   agentFile: (agentId: string, name: string) =>
     api<AgentFile>(`/api/connection/agents/${agentId}/files/${name}`),
   setAgentFile: (agentId: string, name: string, content: string) =>
@@ -783,6 +762,82 @@ export interface WorkspaceSkillsList {
 
 // App health
 export const appHealth = () => api<AppHealth>("/health");
+
+// ── Logs API ────────────────────────────────────────────────────────
+
+export interface GatewayLogLine {
+  line_number: number;
+  timestamp: string | null;
+  level: string;
+  message: string;
+  raw: string;
+}
+
+export interface GatewayLogResponse {
+  lines: number;
+  total_lines: number;
+  log_file: string | null;
+  entries: GatewayLogLine[];
+  raw_output: string;
+}
+
+export interface AuditLogEntry {
+  id: number;
+  timestamp: string;
+  event_type: string;
+  agent_id: string | null;
+  session_id: string | null;
+  user_id: string | null;
+  action: string;
+  details: Record<string, unknown> | null;
+  guardrail_id: string | null;
+  guardrail_action: string | null;
+  tokens_used: number | null;
+  estimated_cost: number | null;
+  model: string | null;
+}
+
+export interface AuditLogSummary {
+  total_events: number;
+  events_today: number;
+  total_tokens: number;
+  total_cost: number;
+  guardrail_triggers: number;
+  top_agents: { agent_id: string; count: number }[];
+  top_event_types: { event_type: string; count: number }[];
+}
+
+export interface ConfigAuditEntry {
+  timestamp: string;
+  source: string;
+  event: string;
+  config_path: string | null;
+  result: string | null;
+  gateway_mode_before: string | null;
+  gateway_mode_after: string | null;
+  suspicious: string[];
+}
+
+export const logsApi = {
+  gateway: (lines = 200) =>
+    api<GatewayLogResponse>(`/api/logs/gateway?lines=${lines}`),
+  configAudit: (limit = 100) =>
+    api<ConfigAuditEntry[]>(`/api/logs/config-audit?limit=${limit}`),
+  audit: (params?: {
+    agent_id?: string;
+    event_type?: string;
+    limit?: number;
+    offset?: number;
+  }) => {
+    const qs = new URLSearchParams();
+    if (params?.agent_id) qs.set("agent_id", params.agent_id);
+    if (params?.event_type) qs.set("event_type", params.event_type);
+    if (params?.limit) qs.set("limit", String(params.limit));
+    if (params?.offset) qs.set("offset", String(params.offset));
+    return api<AuditLogEntry[]>(`/api/logs/audit?${qs.toString()}`);
+  },
+  auditSummary: () => api<AuditLogSummary>("/api/logs/audit/summary"),
+};
 
 // ── Costing types ───────────────────────────────────────────────────
 

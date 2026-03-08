@@ -6,8 +6,24 @@ v2: No dual data store, no workspace seeding, no symlinks.
 from __future__ import annotations
 
 import logging
+from pathlib import Path
+
+from app.services.lifecycle._helpers import resolve_agent_workspace_sync
 
 logger = logging.getLogger(__name__)
+
+
+def _scan_agent_skills(agent_id: str) -> list[str]:
+    """Scan the agent's workspace/skills/ directory and return skill slugs."""
+    workspace = resolve_agent_workspace_sync(agent_id)
+    skills_dir = workspace / "skills"
+    if not skills_dir.is_dir():
+        return []
+    slugs = []
+    for entry in sorted(skills_dir.iterdir()):
+        if entry.is_dir() and not entry.name.startswith(".") and (entry / "SKILL.md").is_file():
+            slugs.append(entry.name)
+    return slugs
 
 
 async def list_openclaw_agents() -> dict:
@@ -25,7 +41,7 @@ async def list_openclaw_agents() -> dict:
                 "name": a.get("name", ""),
                 "emoji": a.get("emoji", ""),
                 "model": a.get("model"),
-                "skills": a.get("skills", []),
+                "skills": a.get("skills", None) or _scan_agent_skills(aid),
                 "is_default": a.get("isDefault", False) or aid == default_id,
             })
         return {
@@ -125,7 +141,7 @@ async def get_agent_detail(agent_id: str) -> dict:
         "workspace": workspace or agent_info.get("workspace", ""),
         "source": "openclaw",
         "files": files,
-        "skills": [],
+        "skills": [{"name": s, "skill_key": s, "source": "workspace"} for s in _scan_agent_skills(agent_id)],
         "sessions": sessions,
     }
 
@@ -177,3 +193,36 @@ async def update_agent_to_agent_allow(agent_id: str, linked_ids: list[str]) -> d
     # writes the full AGENTS.md.  A future gateway API could accept
     # a structured linked-agents config; for now the file IS the config.
     return {"success": True, "message": f"Updated linked agents for {agent_id}"}
+
+
+async def get_agent_memory(agent_id: str) -> dict:
+    """List and read memory files from the agent's runtime directory.
+
+    OpenClaw stores daily conversation logs in:
+        ~/.openclaw/agents/{agent_id}/memory/YYYY-MM-DD.md
+    """
+    from app.services.lifecycle._helpers import OPENCLAW_HOME
+
+    memory_dir = OPENCLAW_HOME / "agents" / agent_id / "memory"
+    entries: list[dict] = []
+
+    if memory_dir.is_dir():
+        for p in sorted(memory_dir.glob("*.md"), reverse=True):
+            try:
+                content = p.read_text(encoding="utf-8")
+                stat = p.stat()
+                entries.append({
+                    "date": p.stem,
+                    "filename": p.name,
+                    "content": content,
+                    "size": stat.st_size,
+                    "modified_at": int(stat.st_mtime * 1000),
+                })
+            except Exception as exc:
+                logger.warning("Failed to read memory file %s: %s", p, exc)
+
+    return {
+        "agent_id": agent_id,
+        "count": len(entries),
+        "entries": entries,
+    }

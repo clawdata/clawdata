@@ -24,6 +24,7 @@ import {
   DollarSign,
   Shield,
   CalendarClock,
+  ScrollText,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -49,6 +50,7 @@ const nav = [
   { href: "/agents", label: "Agents", icon: Bot },
   { href: "/chat", label: "Chat", icon: MessageSquare },
   { href: "/tasks", label: "Tasks", icon: CalendarClock },
+  { href: "/logs", label: "Logs", icon: ScrollText },
   { href: "/templates", label: "Templates", icon: FileCode2 },
   { href: "/costing", label: "Costing", icon: DollarSign },
   { href: "/secrets", label: "Secrets", icon: Shield },

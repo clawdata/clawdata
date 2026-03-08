@@ -20,6 +20,7 @@ dependencies = [
     "pyyaml>=6.0.2",
     "click>=8.1.0",
     "simple-term-menu>=1.6.0",
+    "croniter>=2.0.0",
 ]
 
 [project.scripts]

@@ -27,5 +27,12 @@
             "readOnly": false
         }
     ],
-    "duckdb.defaultDatabase": "sample_data"
+    "duckdb.defaultDatabase": "sample_data",
+    "chat.tools.terminal.autoApprove": {
+        "pip": true,
+        "/^cd /Users/seanpreusse/Documents/Dev/clawdata && source \\.venv/bin/activate && python -c \"\nimport asyncio\nfrom app\\.database import engine\nfrom sqlalchemy import text\n\nasync def check\\(\\):\n    async with engine\\.connect\\(\\) as conn:\n        result = await conn\\.execute\\(text\\('SELECT id, name, agent_id, status, enabled, schedule_type FROM tasks'\\)\\)\n        rows = result\\.fetchall\\(\\)\n        if not rows:\n            print\\('No tasks in DB'\\)\n        for r in rows:\n            print\\(f'  id=\\{r\\[0\\]\\} name=\\{r\\[1\\]\\} agent_id=\\{r\\[2\\]\\} status=\\{r\\[3\\]\\} enabled=\\{r\\[4\\]\\} schedule=\\{r\\[5\\]\\}'\\)\n\nasyncio\\.run\\(check\\(\\)\\)\n\"$/": {
+            "approve": true,
+            "matchCommandLine": true
+        }
+    }
 }

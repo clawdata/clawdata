@@ -16,6 +16,8 @@ import uuid
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
+from app.database import async_session
+from app.services import audit_service
 from app.services import chat_service
 from app.services import secrets_manager as secrets_svc
 
@@ -132,6 +134,19 @@ async def chat_ws(ws: WebSocket, agent_id: str):
             if not message:
                 await _safe_send({"type": "error", "content": "Empty message"})
                 continue
+            # Log audit event
+            try:
+                async with async_session() as db:
+                    await audit_service.log_event(
+                        db,
+                        event_type="chat.sent",
+                        action=f"Sent message to agent '{agent_id}'",
+                        agent_id=agent_id,
+                        session_id=session_key,
+                        details={"message_preview": message[:120]},
+                    )
+            except Exception:
+                logger.debug("Failed to log chat audit event", exc_info=True)
             await chat_queue.put((message, session_key))
 
     # ── Streamer loop ────────────────────────────────────────────────

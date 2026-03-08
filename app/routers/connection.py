@@ -6,10 +6,13 @@ Provides read-only gateway queries plus start/stop/restart process control.
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.database import get_db
 from app.schemas.lifecycle import (
     ActionResult,
     AgentCreatePayload,
@@ -17,6 +20,7 @@ from app.schemas.lifecycle import (
     AgentFile,
     AgentFileSetRequest,
     AgentFilesResponse,
+    AgentMemoryResponse,
     AgentUpdatePayload,
     ConfigGetResponse,
     CostingSummary,
@@ -33,7 +37,9 @@ from app.schemas.lifecycle import (
     WorkspaceSkillsList,
 )
 from app.services import openclaw_lifecycle as lifecycle
+from app.services import audit_service
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -114,30 +120,45 @@ async def _start_gateway() -> bool:
 
 
 @router.post("/start", response_model=ActionResult)
-async def start_gateway(req: dict | None = None):
+async def start_gateway(req: dict | None = None, db: AsyncSession = Depends(get_db)):
     """Start the OpenClaw gateway process."""
     ok = await _start_gateway()
     if ok:
+        await audit_service.log_event(
+            db,
+            event_type="gateway.started",
+            action="Started the OpenClaw gateway",
+        )
         return ActionResult(success=True, message="Gateway started")
     return ActionResult(success=False, message="Gateway did not become ready within 15s")
 
 
 @router.post("/stop", response_model=ActionResult)
-async def stop_gateway():
+async def stop_gateway(db: AsyncSession = Depends(get_db)):
     """Stop the OpenClaw gateway process."""
     killed = await _kill_gateway()
     if killed:
+        await audit_service.log_event(
+            db,
+            event_type="gateway.stopped",
+            action=f"Stopped the OpenClaw gateway ({killed} process(es))",
+        )
         return ActionResult(success=True, message=f"Gateway stopped ({killed} process(es) killed)")
     return ActionResult(success=True, message="Gateway was not running")
 
 
 @router.post("/restart", response_model=ActionResult)
-async def restart_gateway():
+async def restart_gateway(db: AsyncSession = Depends(get_db)):
     """Restart the OpenClaw gateway process (SIGKILL + fresh start)."""
     await _kill_gateway()
     await asyncio.sleep(1)
     ok = await _start_gateway()
     if ok:
+        await audit_service.log_event(
+            db,
+            event_type="gateway.restarted",
+            action="Restarted the OpenClaw gateway",
+        )
         return ActionResult(success=True, message="Gateway restarted")
     return ActionResult(success=False, message="Gateway did not become ready after restart")
 
@@ -237,6 +258,12 @@ async def get_agent_detail(agent_id: str):
 async def list_agent_files(agent_id: str):
     """List workspace files for an agent."""
     return await lifecycle.get_agent_files(agent_id)
+
+
+@router.get("/agents/{agent_id}/memory", response_model=AgentMemoryResponse)
+async def get_agent_memory(agent_id: str):
+    """List daily memory files for an agent."""
+    return await lifecycle.get_agent_memory(agent_id)
 
 
 @router.get("/agents/{agent_id}/files/{name:path}", response_model=AgentFile)

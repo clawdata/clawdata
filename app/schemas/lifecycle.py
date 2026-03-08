@@ -159,6 +159,20 @@ class AgentFile(BaseModel):
     content: str | None = None
 
 
+class MemoryEntry(BaseModel):
+    date: str
+    filename: str
+    content: str = ""
+    size: int = 0
+    modified_at: int | None = None
+
+
+class AgentMemoryResponse(BaseModel):
+    agent_id: str
+    count: int = 0
+    entries: list[MemoryEntry] = Field(default_factory=list)
+
+
 class AgentFilesResponse(BaseModel):
     agent_id: str
     workspace: str = ""
@@ -209,8 +223,30 @@ class SessionHistoryResponse(BaseModel):
 # ── Agent detail ─────────────────────────────────────────────────────
 
 
+class SkillRequirements(BaseModel):
+    """Dependency requirements for a skill."""
+
+    bins: list[str] = Field(default_factory=list)
+    any_bins: list[str] = Field(default_factory=list)
+    env: list[str] = Field(default_factory=list)
+    config: list[str] = Field(default_factory=list)
+    os: list[str] = Field(default_factory=list)
+
+
+class SkillConfigCheck(BaseModel):
+    path: str = ""
+    satisfied: bool = False
+
+
+class SkillInstallOption(BaseModel):
+    id: str = ""
+    kind: str = ""
+    label: str = ""
+    bins: list[str] = Field(default_factory=list)
+
+
 class OpenClawSkill(BaseModel):
-    """A skill from the OpenClaw gateway (for agent detail view)."""
+    """A skill from the OpenClaw gateway."""
 
     name: str
     description: str = ""
@@ -224,6 +260,10 @@ class OpenClawSkill(BaseModel):
     disabled: bool = False
     blocked_by_allowlist: bool = False
     eligible: bool = False
+    requirements: SkillRequirements = Field(default_factory=SkillRequirements)
+    missing: SkillRequirements = Field(default_factory=SkillRequirements)
+    config_checks: list[SkillConfigCheck] = Field(default_factory=list)
+    install: list[SkillInstallOption] = Field(default_factory=list)
 
 
 class AgentDetail(BaseModel):

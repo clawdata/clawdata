@@ -16,7 +16,7 @@ class TaskCreate(BaseModel):
     session_mode: str = Field("isolated", pattern=r"^(main|isolated)$")
     message: str = ""
     agent_id: str = "main"
-    status: str = Field("backlog", pattern=r"^(backlog|active|paused|completed)$")
+    status: str = Field("active", pattern=r"^(backlog|active|paused|completed)$")
     enabled: bool = True
     model_override: str | None = None
     announce: bool = False

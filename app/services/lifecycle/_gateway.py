@@ -163,15 +163,48 @@ async def get_full_status() -> dict:
 
 
 async def get_logs(*, lines: int = 100) -> str:
-    """Return recent gateway log lines (read from log file)."""
-    log_file = OPENCLAW_HOME / "gateway.log"
-    if not log_file.exists():
-        return "(no log file found)"
-    try:
-        rc, out, _ = await _run(["tail", f"-{lines}", str(log_file)], timeout=5)
-        return out if rc == 0 else "(failed to read logs)"
-    except Exception:
-        return "(failed to read logs)"
+    """Return recent gateway log lines.
+
+    OpenClaw stores structured JSON logs at /tmp/openclaw/openclaw-YYYY-MM-DD.log
+    Falls back to ~/.openclaw/gateway.log for older versions.
+    """
+    from datetime import datetime as _dt, timedelta
+
+    # Try /tmp/openclaw/ first (modern OpenClaw)
+    tmp_log_dir = Path("/tmp/openclaw")
+    if tmp_log_dir.is_dir():
+        # Get today's + yesterday's log files (most recent first)
+        today = _dt.now().strftime("%Y-%m-%d")
+        yesterday = (_dt.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+        candidates = [
+            tmp_log_dir / f"openclaw-{today}.log",
+            tmp_log_dir / f"openclaw-{yesterday}.log",
+        ]
+        # Also check for any log files sorted by mtime
+        all_logs = sorted(tmp_log_dir.glob("openclaw-*.log"), key=lambda p: p.stat().st_mtime, reverse=True)
+        for f in all_logs:
+            if f not in candidates:
+                candidates.append(f)
+
+        for log_file in candidates:
+            if log_file.exists() and log_file.stat().st_size > 0:
+                try:
+                    rc, out, _ = await _run(["tail", f"-{lines}", str(log_file)], timeout=10)
+                    if rc == 0 and out.strip():
+                        return out
+                except Exception:
+                    continue
+
+    # Fallback: legacy ~/.openclaw/gateway.log
+    legacy = OPENCLAW_HOME / "gateway.log"
+    if legacy.exists():
+        try:
+            rc, out, _ = await _run(["tail", f"-{lines}", str(legacy)], timeout=5)
+            return out if rc == 0 else "(failed to read logs)"
+        except Exception:
+            return "(failed to read logs)"
+
+    return "(no log file found — gateway may not have started yet)"
 
 
 async def check_onboarding() -> dict:

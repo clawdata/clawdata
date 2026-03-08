@@ -85,7 +85,7 @@ app.add_middleware(
 )
 
 # Mount routers
-from app.routers import agents, approvals, audit, behaviour, chat, connection, guardrails, secrets_manager, skills, tasks, templates
+from app.routers import agents, approvals, audit, behaviour, chat, connection, guardrails, logs, secrets_manager, skills, tasks, templates
 
 app.include_router(connection.router, prefix="/api/connection", tags=["connection"])
 app.include_router(agents.router, prefix="/api/agents", tags=["agents"])
@@ -98,6 +98,7 @@ app.include_router(tasks.router, prefix="/api/tasks", tags=["tasks"])
 app.include_router(chat.router, prefix="/api/chat", tags=["chat"])
 app.include_router(guardrails.router, prefix="/api/guardrails", tags=["guardrails"])
 app.include_router(audit.router, prefix="/api/audit", tags=["audit"])
+app.include_router(logs.router, prefix="/api/logs", tags=["logs"])
 
 
 @app.get("/health")

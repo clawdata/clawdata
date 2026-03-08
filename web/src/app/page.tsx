@@ -9,7 +9,6 @@ import {
   type FullStatus,
   type AppHealth,
   type OpenClawAgentsList,
-  type SkillsStatusResponse,
   type Template,
   type CostingSummary,
 } from "@/lib/api";
@@ -20,7 +19,6 @@ import { Button } from "@/components/ui/button";
 import {
   Bot,
   MessageSquare,
-  Puzzle,
   FileCode2,
   ArrowRight,
   DollarSign,
@@ -62,10 +60,6 @@ export default function DashboardPage() {
   });
   const { data: agentsData, isLoading: agentsLoading } =
     useSWR<OpenClawAgentsList>("/api/connection/agents", fetcher);
-  const { data: skillsData } = useSWR<SkillsStatusResponse>(
-    "/api/connection/skills",
-    fetcher,
-  );
   const { data: templates } = useSWR<Template[]>("/api/templates/", fetcher);
   const { data: costing } = useSWR<CostingSummary>(
     "/api/connection/costing",
@@ -77,8 +71,6 @@ export default function DashboardPage() {
   const gw = status?.gateway;
   const gwOk = gw?.state === "running";
   const apiOk = health?.status === "ok";
-  const skillCount =
-    skillsData?.skills?.filter((s) => !s.disabled).length ?? 0;
   const templateCount = templates?.length ?? 0;
   const openclawVersion = status?.prerequisites?.openclaw?.version;
 
@@ -193,7 +185,7 @@ export default function DashboardPage() {
         <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           Quick Actions
         </h2>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           {(
             [
               {
@@ -201,12 +193,6 @@ export default function DashboardPage() {
                 icon: MessageSquare,
                 label: "New Chat",
                 detail: "Start a conversation",
-              },
-              {
-                href: "/skills",
-                icon: Puzzle,
-                label: "Skills",
-                detail: `${skillCount} active`,
               },
               {
                 href: "/templates",
@@ -226,8 +212,8 @@ export default function DashboardPage() {
           ).map(({ href, icon: Icon, label, detail }) => (
             <Link key={href} href={href}>
               <Card className="h-full cursor-pointer transition-colors hover:bg-accent/50">
-                <CardContent className="flex flex-col gap-2 p-4">
-                  <Icon className="h-5 w-5 text-primary" />
+                <CardContent className="flex items-center gap-3 p-4">
+                  <Icon className="h-4 w-4 text-muted-foreground" />
                   <div>
                     <p className="text-sm font-medium">{label}</p>
                     <p className="text-xs text-muted-foreground">{detail}</p>
@@ -246,7 +232,7 @@ export default function DashboardPage() {
             Usage
           </h2>
           <Card>
-            <CardContent className="grid grid-cols-3 divide-x p-0">
+            <CardContent className="flex items-center gap-6 px-5 py-4">
               {[
                 {
                   value: String(costing.session_count),
@@ -260,12 +246,10 @@ export default function DashboardPage() {
                   value: `$${costing.total_estimated_cost_usd.toFixed(2)}`,
                   label: "Est. cost",
                 },
-              ].map(({ value, label }) => (
-                <div key={label} className="px-6 py-5 text-center">
-                  <p className="text-2xl font-bold tabular-nums">{value}</p>
-                  <p className="mt-0.5 text-xs text-muted-foreground">
-                    {label}
-                  </p>
+              ].map(({ value, label }, i) => (
+                <div key={label} className="flex items-baseline gap-1.5">
+                  <span className="text-sm font-semibold tabular-nums">{value}</span>
+                  <span className="text-xs text-muted-foreground">{label}</span>
                 </div>
               ))}
             </CardContent>
@@ -282,13 +266,7 @@ export default function DashboardPage() {
               <p className="text-sm font-medium">Tip</p>
               <p className="mt-0.5 text-sm text-muted-foreground">
                 Add skills to your agents to give them access to databases,
-                APIs, and data tools.{" "}
-                <Link
-                  href="/skills"
-                  className="font-medium text-primary underline-offset-4 hover:underline"
-                >
-                  Browse skills →
-                </Link>
+                APIs, and data tools. Open an agent to manage its skills.
               </p>
             </div>
           </div>

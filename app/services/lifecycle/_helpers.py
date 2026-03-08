@@ -13,6 +13,32 @@ OPENCLAW_HOME = Path.home() / ".openclaw"
 OPENCLAW_CONFIG = OPENCLAW_HOME / "openclaw.json"
 
 
+def resolve_agent_workspace_sync(agent_id: str) -> Path:
+    """Resolve the workspace path for an agent from openclaw.json (sync).
+
+    Resolution order:
+    1. Per-agent ``workspace`` in agents.list[]
+    2. Default workspace in agents.defaults.workspace
+    3. Convention: ``~/.openclaw/workspace``
+    """
+    try:
+        cfg = json.loads(OPENCLAW_CONFIG.read_text())
+        # Check per-agent workspace
+        for a in cfg.get("agents", {}).get("list", []):
+            if a.get("id") == agent_id:
+                ws = a.get("workspace", "")
+                if ws:
+                    return Path(ws)
+                break
+        # Fall back to default workspace
+        ws = cfg.get("agents", {}).get("defaults", {}).get("workspace", "")
+        if ws:
+            return Path(ws)
+    except Exception:
+        pass
+    return OPENCLAW_HOME / "workspace"
+
+
 async def resolve_agent_workspace(agent_id: str) -> Path:
     """Resolve the filesystem workspace path for an agent.
 

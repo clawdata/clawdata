@@ -1,5 +1,7 @@
 """Task CRUD + template + run-history endpoints."""
 
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,9 +15,28 @@ from app.schemas.task import (
     TaskTemplateResponse,
     TaskUpdate,
 )
-from app.services import task_service
+from app.services import task_service, audit_service
+from app.services.heartbeat_sync import sync_heartbeat
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
+
+
+# ── Manual execute ───────────────────────────────────────────────────
+
+@router.post("/{task_id}/execute", response_model=TaskRunResponse)
+async def execute_task(task_id: str, db: AsyncSession = Depends(get_db)):
+    """Manually trigger immediate execution of a task."""
+    task = await task_service.get_task(db, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    from app.services.job_scheduler import scheduler
+
+    run = await scheduler.execute_manual(task_id)
+    if not run:
+        raise HTTPException(status_code=500, detail="Task execution failed to start")
+    return run
 
 
 # ── Task templates ───────────────────────────────────────────────────
@@ -61,7 +82,20 @@ async def create_task(data: TaskCreate, db: AsyncSession = Depends(get_db)):
     existing = await task_service.get_task(db, data.id)
     if existing:
         raise HTTPException(status_code=409, detail="Task already exists")
-    return await task_service.create_task(db, data)
+    task = await task_service.create_task(db, data)
+    await audit_service.log_event(
+        db,
+        event_type="task.created",
+        action=f"Created task '{data.id}'",
+        agent_id=data.agent_id,
+        details={
+            "name": data.name,
+            "schedule_type": data.schedule_type or "cron",
+            "cron": data.cron_expression,
+        },
+    )
+    await sync_heartbeat(db, data.agent_id)
+    return task
 
 
 @router.patch("/{task_id}", response_model=TaskResponse)
@@ -71,14 +105,31 @@ async def update_task(
     task = await task_service.update_task(db, task_id, data)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
+    changes = {k: v for k, v in data.model_dump(exclude_unset=True).items()}
+    await audit_service.log_event(
+        db,
+        event_type="task.updated",
+        action=f"Updated task '{task_id}'",
+        agent_id=task.agent_id,
+        details={"changes": changes},
+    )
+    await sync_heartbeat(db, task.agent_id)
     return task
 
 
 @router.delete("/{task_id}", status_code=204)
 async def delete_task(task_id: str, db: AsyncSession = Depends(get_db)):
-    deleted = await task_service.delete_task(db, task_id)
-    if not deleted:
+    task = await task_service.get_task(db, task_id)
+    if not task:
         raise HTTPException(status_code=404, detail="Task not found")
+    agent_id = task.agent_id
+    await task_service.delete_task(db, task_id)
+    await audit_service.log_event(
+        db,
+        event_type="task.deleted",
+        action=f"Deleted task '{task_id}'",
+    )
+    await sync_heartbeat(db, agent_id)
 
 
 # ── Task runs ────────────────────────────────────────────────────────

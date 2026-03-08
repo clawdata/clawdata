@@ -13,6 +13,7 @@ import {
   type ActionResult,
   type WorkspaceSkill,
   type WorkspaceSkillsList,
+  type AgentMemoryResponse,
 } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -73,7 +74,6 @@ const FILE_META: Record<string, { label: string; icon: typeof FileText; desc: st
   "AGENTS.md": { label: "Agents", icon: Users, desc: "Multi-agent configuration" },
   "USER.md": { label: "User", icon: User, desc: "User profile information" },
   "HEARTBEAT.md": { label: "Heartbeat", icon: Clock, desc: "Scheduled tasks & cron" },
-  "MEMORY.md": { label: "Memory", icon: Brain, desc: "Agent memory & context" },
 };
 
 // ── Main component ─────────────────────────────────────────────────
@@ -147,6 +147,9 @@ export default function AgentDetailPage() {
           <TabsTrigger value="skills">
             <Puzzle className="mr-1.5 h-3.5 w-3.5" /> Skills
           </TabsTrigger>
+          <TabsTrigger value="memory">
+            <Brain className="mr-1.5 h-3.5 w-3.5" /> Memory
+          </TabsTrigger>
           <TabsTrigger value="sessions">
             <MessageSquare className="mr-1.5 h-3.5 w-3.5" /> Sessions
             {detail.sessions.length > 0 && (
@@ -166,7 +169,7 @@ export default function AgentDetailPage() {
           />
         </TabsContent>
         <TabsContent value="files">
-          <FilesTab agentId={agentId} files={detail.files} onUpdate={() => mutateDetail()} />
+          <FilesTab agentId={agentId} files={detail.files.filter(f => f.name !== "MEMORY.md")} onUpdate={() => mutateDetail()} />
         </TabsContent>
         <TabsContent value="skills">
           <SkillsTab
@@ -174,6 +177,9 @@ export default function AgentDetailPage() {
             wsSkills={wsSkillsData ?? { workspace_skills: [], project_skills: [], managed_skills: [] }}
             onWsMutate={() => mutateWsSkills()}
           />
+        </TabsContent>
+        <TabsContent value="memory">
+          <MemoryTab agentId={agentId} />
         </TabsContent>
         <TabsContent value="sessions">
           <SessionsTab sessions={detail.sessions} onUpdate={() => mutateDetail()} />
@@ -946,6 +952,126 @@ function SkillsTab({
         </DialogContent>
       </Dialog>
       <ConfirmDialog />
+    </div>
+  );
+}
+
+// ── Memory Tab ─────────────────────────────────────────────────────
+
+function MemoryTab({ agentId }: { agentId: string }) {
+  const { data, isLoading } = useSWR<AgentMemoryResponse>(
+    agentId ? `/api/connection/agents/${agentId}/memory` : null,
+    () => lifecycleApi.agentMemory(agentId)
+  );
+  const [expanded, setExpanded] = useState<string | null>(null);
+
+  if (isLoading) {
+    return (
+      <div className="space-y-3">
+        <Skeleton className="h-16 w-full" />
+        <Skeleton className="h-16 w-full" />
+      </div>
+    );
+  }
+
+  const entries = data?.entries ?? [];
+
+  if (entries.length === 0) {
+    return (
+      <Card>
+        <CardContent className="py-12 text-center text-muted-foreground">
+          <p className="text-sm">No memory files yet.</p>
+          <p className="text-xs mt-1">
+            Memory is written automatically when you chat with the agent.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      <p className="text-xs text-muted-foreground">
+        Daily conversation logs — {entries.length} {entries.length === 1 ? "day" : "days"} recorded
+      </p>
+      {entries.map((entry) => {
+        const isOpen = expanded === entry.date;
+        const lines = entry.content
+          .split("\n")
+          .filter((l) => l.startsWith("- "));
+        const date = new Date(entry.date + "T00:00:00");
+        const isToday =
+          entry.date === new Date().toISOString().slice(0, 10);
+
+        return (
+          <Card key={entry.date}>
+            <button
+              className="flex w-full items-center justify-between px-4 py-3 text-left"
+              onClick={() => setExpanded(isOpen ? null : entry.date)}
+            >
+              <div className="flex items-center gap-3">
+                <div className="flex h-8 w-8 items-center justify-center rounded-md bg-muted text-xs font-medium tabular-nums">
+                  {date.getDate()}
+                </div>
+                <div>
+                  <p className="text-sm font-medium">
+                    {date.toLocaleDateString("en-US", {
+                      weekday: "short",
+                      month: "short",
+                      day: "numeric",
+                    })}
+                    {isToday && (
+                      <span className="ml-1.5 text-[10px] text-muted-foreground">
+                        today
+                      </span>
+                    )}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {lines.length} {lines.length === 1 ? "exchange" : "exchanges"}
+                  </p>
+                </div>
+              </div>
+              <svg
+                className={cn(
+                  "h-4 w-4 text-muted-foreground transition-transform",
+                  isOpen && "rotate-180"
+                )}
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            {isOpen && (
+              <CardContent className="border-t pt-3 pb-4">
+                <div className="space-y-1.5">
+                  {lines.map((line, i) => {
+                    const match = line.match(
+                      /^- (\d{2}:\d{2}) — (.+)$/
+                    );
+                    if (!match) return null;
+                    return (
+                      <div
+                        key={i}
+                        className="flex gap-3 text-sm"
+                      >
+                        <span className="shrink-0 font-mono text-xs text-muted-foreground tabular-nums pt-0.5">
+                          {match[1]}
+                        </span>
+                        <span className="text-muted-foreground">
+                          {match[2]}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </CardContent>
+            )}
+          </Card>
+        );
+      })}
     </div>
   );
 }

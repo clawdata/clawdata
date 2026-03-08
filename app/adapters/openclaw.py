@@ -786,6 +786,15 @@ class OpenClawAdapter(AIBackendAdapter):
     async def sessions_compact(self, key: str) -> dict[str, Any]:
         return await self._request("sessions.compact", {"key": key})
 
+    # ── Skills ────────────────────────────────────────────────────────
+
+    async def skills_status(self, agent_id: str | None = None) -> dict[str, Any]:
+        """Fetch skills status from the gateway."""
+        params: dict[str, Any] = {}
+        if agent_id:
+            params["agentId"] = agent_id
+        return await self._request("skills.status", params)
+
     # ── Costing ──────────────────────────────────────────────────────
 
     async def get_all_sessions_for_costing(

@@ -34,6 +34,7 @@ from app.services.lifecycle._agents import (  # noqa: F401
     update_agent,
     delete_agent,
     reset_agents,
+    get_agent_memory,
 )
 from app.services.lifecycle._sessions import (  # noqa: F401
     get_agent_sessions,
@@ -81,6 +82,7 @@ __all__ = [
     "update_agent",
     "delete_agent",
     "reset_agents",
+    "get_agent_memory",
     "get_agent_sessions",
     "reset_session",
     "delete_session",
